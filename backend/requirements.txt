@@ -1,0 +1,14 @@
+# MEMVERSE — runtime dependencies (Python 3.10+)
+fastapi>=0.115
+uvicorn>=0.30
+pydantic>=2.7
+cryptography>=42
+python-dotenv>=1.0
+
+# --- tests ---
+pytest>=8
+httpx>=0.27
+
+# browser E2E only (tests/e2e_ui.py, tests/e2e_hardening.py):
+#   pip install playwright && playwright install chromium
+playwright>=1.45
