@@ -79,6 +79,35 @@ Every prompt, document attachment, and memory operation passes through a **12-st
 
 ---
 
+### Client-Side Biometric Face Privacy & Live Transparency Lens
+<table width="100%">
+  <tr>
+    <td width="50%" align="center">
+      <strong>Biometric Consent Gate (Before/After)</strong><br/><br/>
+      <img src="docs/assets/biometric_privacy_gate.png" width="100%" alt="Biometric Privacy Gate"/>
+    </td>
+    <td width="50%" align="center">
+      <strong>Multimodal Vision Stream (AI Chat)</strong><br/><br/>
+      <img src="docs/assets/biometric_chat_stream.png" width="100%" alt="Biometric Chat Stream"/>
+    </td>
+  </tr>
+  <tr>
+    <td align="center"><em>Real-time WASM face detection with side-by-side 8×8 mosaic pixelation preview and mode toggles.</em></td>
+    <td align="center"><em>Zero-trust image preview card in chat bubble + NVIDIA vision model analysis with zero face leaks.</em></td>
+  </tr>
+  <tr>
+    <td colspan="2" align="center">
+      <br/><strong>Live Privacy Lens (Interactive Laser Split-Slider)</strong><br/><br/>
+      <img src="docs/assets/live_privacy_lens_image.png" width="90%" alt="Live Privacy Lens"/>
+    </td>
+  </tr>
+  <tr>
+    <td colspan="2" align="center"><em>Interactive green laser comparison slider: visually cross-examine "Raw Client Upload" vs "Sanitized AI Wire Egress".</em></td>
+  </tr>
+</table>
+
+---
+
 ### Enterprise Memory Governance & Security Operations
 <table width="100%">
   <tr>
@@ -310,16 +339,23 @@ stateDiagram-v2
   - Filename anonymization prevents data leaks embedded in metadata strings (e.g., `resume_satvik.pdf` $\rightarrow$ `document.pdf`).
   - Preserves domain semantics (technologies, projects, clinical parameters) while stripping personally identifiable strings.
 
-### 2. Global Persona Vault
-- **Continuous Zero-Trust Scaffolding**: Detects non-sensitive background attributes across conversational sessions and populates a secure structured registry.
-- **Strict Relevance Constraint**: Injected system instructions enforce that personal context is referenced only when directly required by the prompt, preventing unsolicited disclosure.
+### 2. Client-Side Biometric Face Redaction & Image Privacy Pipeline
+- **WASM TinyFaceDetector Integration**: Real-time client-side face recognition running entirely in browser memory.
+- **8×8 Mosaic Pixelation Engine**: Automatically locates facial bounding boxes and executes nearest-neighbor mosaic pixelation over sensitive biometric zones before transmission.
+- **Biometric Consent Gate**: Interactive modal presenting side-by-side Before/After transparency previews (`Raw Upload` vs `Redacted Egress`) with explicit mode toggling.
+- **Multimodal Vision Routing**: Intelligent gateway routing that dispatches visual payloads to vision foundation models (`meta/llama-3.2-11b-vision-instruct`) while maintaining pure text speed on `nvidia/nemotron-3.5-lightning-30b-a3b`.
+- **Zero-Retention Biometric Guarantee**: EXIF GPS/device metadata stripped on ingestion. Images and biometric embeddings are never stored in the Persona Vault or SQLite database (1-Request TTL Ephemeral Pipeline).
+
+### 3. Global Persona Vault (Textual Personalization Only)
+- **Continuous Zero-Trust Scaffolding**: Auto-harvests factual semantic attributes (Education, Career Goals, Age Band, Region) to personalize downstream responses without raw identity exposure.
+- **Strict Relevance Constraint**: System instructions enforce that background context is referenced only when directly required by the prompt, preventing unsolicited disclosure.
 - **User Agency**: Users can inspect, selectively delete, or completely purge their global profile with one click.
 
-### 3. Adversarial Threat Defense
+### 4. Adversarial Threat Defense & Live Privacy Lens
 - **Poisoning & Injection Engine**: Evaluates prompts against weighted structural heuristics (instruction overrides, boundary breaches, exfiltration vectors).
-- **Multi-Vector Escalation**: Stacking multiple suspicious patterns triggers a `+15` escalation score, forcing automatic request quarantine.
+- **Interactive Holographic Split-Scanner**: Green laser comparison slider empowering users and auditors to visually cross-examine original inputs against the exact redacted wire payload received by the AI model.
 
-### 4. Cryptographic Receipts & Ledger
+### 5. Cryptographic Receipts & Ledger
 - **SHA-256 Hash Chain**: Each request generates an immutable event record containing input hash, output hash, policy version, and previous block hash.
 - **Mathematical Integrity Verification**: The `/api/receipts/{id}/verify` endpoint recomputes state from raw cryptographic parameters to prove zero tampering.
 
@@ -408,10 +444,11 @@ Navigate to `http://127.0.0.1:8008` in your browser.
 
 ## API Specification
 
-### Chat & Document Endpoints
+### Chat, Document & Biometric Endpoints
 - `POST /api/chat/stream` — Real-time Server-Sent Events (SSE) streaming chat through the 12-stage gateway.
 - `POST /api/chat/document` — Multi-part document upload with PII detection and sanitization.
 - `POST /api/chat/document/stream` — Streaming response for document analysis queries.
+- `POST /api/chat/image` — Multimodal image upload with EXIF metadata stripping, biometric consent enforcement, and client-side face mosaic integration.
 
 ### Persona & Memory Endpoints
 - `GET /api/persona` — Retrieves active attributes in the user Persona Vault.
