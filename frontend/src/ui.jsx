@@ -1,4 +1,4 @@
-// Shared UI atoms for MEMVERSE
+// Shared UI atoms for MEMVERSE — Minimalist Brutalist Console
 import React from 'react'
 
 export function Badge({ kind = 'info', children }) {
@@ -28,25 +28,45 @@ export function StageStatusIcon({ status }) {
     : status === 'blocked' ? '#b91c1c'
     : status === 'warn' ? '#b45309'
     : status === 'error' ? '#b91c1c'
-    : '#64748b'
+    : '#71717a'
   return (
-    <span aria-hidden="true" style={{ width: 16, height: 16, borderRadius: '50%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+    <span aria-hidden="true" style={{ width: 16, height: 16, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-        {status === 'ok' && <g><circle cx="8" cy="8" r="6" fill={color} opacity="0.15" /><path d="M5.5 8.2l1.7 1.7 3.3-3.6" stroke={color} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></g>}
-        {status === 'blocked' && <g><circle cx="8" cy="8" r="6" fill={color} opacity="0.15" /><path d="M5.4 5.4l5.2 5.2M10.6 5.4l-5.2 5.2" stroke={color} strokeWidth="1.6" strokeLinecap="round" /></g>}
-        {status === 'warn' && <g><circle cx="8" cy="8" r="6" fill={color} opacity="0.15" /><path d="M8 5v3.4" stroke={color} strokeWidth="1.6" strokeLinecap="round" /><circle cx="8" cy="11" r="0.9" fill={color} /></g>}
-        {status === 'error' && <g><circle cx="8" cy="8" r="6" fill={color} opacity="0.15" /><path d="M5.4 5.4l5.2 5.2M10.6 5.4l-5.2 5.2" stroke={color} strokeWidth="1.6" strokeLinecap="round" /></g>}
-        {(status === 'info' || !status) && <g><circle cx="8" cy="8" r="6" fill={color} opacity="0.15" /><circle cx="8" cy="8" r="2" fill={color} /></g>}
+        {status === 'ok' && (
+          <g>
+            <rect x="1" y="1" width="14" height="14" rx="2" fill="#f0fdf4" stroke={color} strokeWidth="1.5" />
+            <path d="M4.5 8l2.5 2.5 4.5-5" stroke={color} strokeWidth="1.8" strokeLinecap="square" strokeLinejoin="miter" />
+          </g>
+        )}
+        {(status === 'blocked' || status === 'error') && (
+          <g>
+            <rect x="1" y="1" width="14" height="14" rx="2" fill="#fef2f2" stroke={color} strokeWidth="1.5" />
+            <path d="M5 5l6 6M11 5l-6 6" stroke={color} strokeWidth="1.8" strokeLinecap="square" />
+          </g>
+        )}
+        {status === 'warn' && (
+          <g>
+            <rect x="1" y="1" width="14" height="14" rx="2" fill="#fffbeb" stroke={color} strokeWidth="1.5" />
+            <path d="M8 4.5v4" stroke={color} strokeWidth="1.8" strokeLinecap="square" />
+            <rect x="7.2" y="10" width="1.6" height="1.6" fill={color} />
+          </g>
+        )}
+        {(status === 'info' || !status) && (
+          <g>
+            <rect x="1" y="1" width="14" height="14" rx="2" fill="#f4f5f7" stroke={color} strokeWidth="1.5" />
+            <rect x="6.5" y="6.5" width="3" height="3" fill={color} />
+          </g>
+        )}
       </svg>
     </span>
   )
 }
 
-export function ShieldIcon({ size = 14 }) {
+export function ShieldIcon({ size = 15 }) {
   return (
     <svg width={size} height={size} viewBox="0 0 16 16" fill="none" aria-hidden="true">
-      <path d="M8 1.5l5 2v4c0 3-2.2 5.6-5 6.5-2.8-.9-5-3.5-5-6.5v-4l5-2z" stroke="#0d9488" strokeWidth="1.4" fill="#e6f7f5" />
-      <path d="M6 8l1.5 1.5L10.5 6.5" stroke="#0d9488" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M8 1.5l5 2.2v4.2c0 3.2-2.2 5.8-5 6.6-2.8-.8-5-3.4-5-6.6V3.7l5-2.2z" stroke="#090a0c" strokeWidth="1.5" fill="#f0fdfa" />
+      <path d="M5.5 8l2 2 3.5-4" stroke="#0f766e" strokeWidth="1.6" strokeLinecap="square" strokeLinejoin="miter" />
     </svg>
   )
 }

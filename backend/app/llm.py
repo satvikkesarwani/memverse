@@ -30,24 +30,26 @@ class LLMProvider:
     def generate(self, messages: list[dict], purpose: str = "", request_id: str = "", request_number: int = 0) -> dict:
         raise NotImplementedError
 
+    def generate_stream(self, messages: list[dict], purpose: str = "", request_id: str = "", request_number: int = 0):
+        raise NotImplementedError
+
 
 class NVIDIAProvider(LLMProvider):
     name = "nvidia"
     model = NVIDIA_MODEL
 
-    def generate(self, messages: list[dict], purpose: str = "", request_id: str = "", request_number: int = 0) -> dict:
+    def generate_stream(self, messages: list[dict], purpose: str = "", request_id: str = "", request_number: int = 0):
         t0 = time.perf_counter()
         if not NVIDIA_KEY:
             raise RuntimeError("NVIDIA_API_KEY is not configured")
         body = _json.dumps({
             "model": self.model,
             "messages": messages,
-            "max_tokens": 4096,
-            "temperature": 1,
-            "top_p": 0.95,
+            "max_tokens": 1024,
+            "temperature": 0.6,
+            "top_p": 0.9,
             "stream": True,
-            "chat_template_kwargs": {"enable_thinking": True},
-            "reasoning_budget": 2048,
+            "chat_template_kwargs": {"enable_thinking": False},
         }).encode("utf-8")
         req = urllib.request.Request(
             NVIDIA_URL, data=body, method="POST",
@@ -57,8 +59,8 @@ class NVIDIAProvider(LLMProvider):
         )
         auditlog.model_request_sent(request_id, request_number, "", 0, self.name, self.model, 0)
         try:
-            with urllib.request.urlopen(req, timeout=120) as resp:
-                content_parts = []
+            with urllib.request.urlopen(req, timeout=45) as resp:
+                in_think = False
                 for raw_line in resp:
                     line = raw_line.decode("utf-8").strip()
                     if not line.startswith("data:"):
@@ -71,10 +73,16 @@ class NVIDIAProvider(LLMProvider):
                         delta = chunk["choices"][0].get("delta", {})
                         piece = delta.get("content") or ""
                         if piece:
-                            content_parts.append(piece)
+                            if "<think>" in piece:
+                                in_think = True
+                                continue
+                            if "</think>" in piece:
+                                in_think = False
+                                piece = piece.split("</think>", 1)[1]
+                            if not in_think and piece:
+                                yield piece
                     except Exception:
                         continue
-                text = "".join(content_parts)
         except urllib.error.HTTPError as e:
             auditlog.model_request_failed(request_id, request_number, "", 0, f"http_{e.code}")
             raise RuntimeError(f"NVIDIA API HTTP {e.code}: {e.read().decode('utf-8', 'ignore')[:300]}")
@@ -83,6 +91,13 @@ class NVIDIAProvider(LLMProvider):
             raise RuntimeError(f"NVIDIA connection failed: {e}")
         auditlog.model_response_received(request_id, request_number, "", 0, self.name,
                                          (time.perf_counter() - t0) * 1000)
+
+    def generate(self, messages: list[dict], purpose: str = "", request_id: str = "", request_number: int = 0) -> dict:
+        t0 = time.perf_counter()
+        pieces = []
+        for piece in self.generate_stream(messages, purpose=purpose, request_id=request_id, request_number=request_number):
+            pieces.append(piece)
+        text = "".join(pieces).strip()
         return {
             "text": text,
             "provider": self.name,
@@ -98,6 +113,22 @@ class DemoProvider(LLMProvider):
     name = "demo"
     model = "memverse-demo-v1"
 
+    def generate_stream(self, messages: list[dict], purpose: str = "", request_id: str = "", request_number: int = 0):
+        t0 = time.perf_counter()
+        user = messages[-1]["content"] if messages else ""
+        ctx = ""
+        for m in messages:
+            if m["role"] == "system":
+                ctx = m["content"]
+        text = self._respond(user, ctx)
+        auditlog.model_request_sent(request_id, request_number, "", 0, self.name, self.model, 0)
+        words = text.split(" ")
+        for i, w in enumerate(words):
+            yield (w if i == 0 else " " + w)
+            time.sleep(0.015)
+        auditlog.model_response_received(request_id, request_number, "", 0, self.name,
+                                         (time.perf_counter() - t0) * 1000)
+
     def generate(self, messages: list[dict], purpose: str = "", request_id: str = "", request_number: int = 0) -> dict:
         t0 = time.perf_counter()
         user = messages[-1]["content"] if messages else ""
@@ -105,7 +136,7 @@ class DemoProvider(LLMProvider):
         for m in messages:
             if m["role"] == "system":
                 ctx = m["content"]
-        time.sleep(0.25)  # simulate model latency (demo only)
+        time.sleep(0.1)
         text = self._respond(user, ctx)
         auditlog.model_request_sent(request_id, request_number, "", 0, self.name, self.model, 0)
         auditlog.model_response_received(request_id, request_number, "", 0, self.name,

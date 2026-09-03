@@ -10,6 +10,7 @@ The same input + purpose + destination + passport + policy version always
 yields the same decision. Policy is stored in SQLite (policies table) and the
 current version is served to the frontend via /api/policies/current.
 """
+import copy
 import time
 import db
 from models import PolicyDecision, FieldDecision, MemoryPassport
@@ -62,12 +63,6 @@ DEFAULT_POLICY = {
             "reason": "Input contains instructions attempting to override agent policy. Quarantined.",
         },
         {
-            "id": "operation.learn",
-            "if": {"operation": "LEARN"},
-            "then": "BLOCK",
-            "reason": "LEARN (training/analytics reuse) is an extension path in this prototype — no data is reused for learning.",
-        },
-        {
             "id": "purpose.unapproved",
             "if": {"purpose.approved": False},
             "then": "BLOCK",
@@ -81,7 +76,7 @@ DEFAULT_POLICY = {
         },
     ],
     "purpose_matrix": {
-        # sensitivity -> purpose action for REVEAL
+        # sensitivity -> purpose action for REVEAL / REMEMBER / LEARN
         "REVEAL": {
             "LOW": "ALLOW",
             "MEDIUM": "TRANSFORM",
@@ -94,36 +89,44 @@ DEFAULT_POLICY = {
             "HIGH": "TRANSFORM",
             "CRITICAL": "BLOCK",
         },
-        "LEARN": {"*": "BLOCK"},
+        "LEARN": {
+            "LOW": "GENERALIZE",
+            "MEDIUM": "GENERALIZE",
+            "HIGH": "BLOCK",
+            "CRITICAL": "BLOCK",
+        },
     },
     "field_strategy": {
         # type -> {purpose_action: field action}
-        "identity": {"TRANSFORM": "SUPPRESS", "ALLOW": "ALLOW", "BLOCK": "BLOCK"},
-        "name": {"TRANSFORM": "SUPPRESS", "ALLOW": "ALLOW", "BLOCK": "BLOCK"},
-        "contact": {"TRANSFORM": "REDACT", "ALLOW": "ALLOW", "BLOCK": "BLOCK"},
-        "email": {"TRANSFORM": "REDACT", "ALLOW": "ALLOW", "BLOCK": "BLOCK"},
-        "phone": {"TRANSFORM": "REDACT", "ALLOW": "ALLOW", "BLOCK": "BLOCK"},
-        "demographic": {"TRANSFORM": "GENERALIZE", "ALLOW": "ALLOW", "BLOCK": "BLOCK"},
-        "age": {"TRANSFORM": "GENERALIZE", "ALLOW": "ALLOW", "BLOCK": "BLOCK"},
-        "location": {"TRANSFORM": "GENERALIZE", "ALLOW": "ALLOW", "BLOCK": "BLOCK"},
-        "city": {"TRANSFORM": "GENERALIZE", "ALLOW": "ALLOW", "BLOCK": "BLOCK"},
-        "education": {"TRANSFORM": "GENERALIZE", "ALLOW": "ALLOW", "BLOCK": "BLOCK"},
-        "health": {"TRANSFORM": "REDACT", "ALLOW": "ALLOW", "BLOCK": "BLOCK"},
-        "financial": {"TRANSFORM": "REDACT", "ALLOW": "ALLOW", "BLOCK": "BLOCK"},
-        "credential": {"TRANSFORM": "BLOCK", "ALLOW": "BLOCK", "BLOCK": "BLOCK"},
-        "task": {"TRANSFORM": "ALLOW", "ALLOW": "ALLOW", "BLOCK": "BLOCK"},
-        "context": {"TRANSFORM": "ALLOW", "ALLOW": "ALLOW", "BLOCK": "BLOCK"},
+        "identity": {"TRANSFORM": "SUPPRESS", "ALLOW": "ALLOW", "BLOCK": "BLOCK", "GENERALIZE": "SUPPRESS"},
+        "name": {"TRANSFORM": "SUPPRESS", "ALLOW": "ALLOW", "BLOCK": "BLOCK", "GENERALIZE": "SUPPRESS"},
+        "contact": {"TRANSFORM": "REDACT", "ALLOW": "ALLOW", "BLOCK": "BLOCK", "GENERALIZE": "REDACT"},
+        "email": {"TRANSFORM": "REDACT", "ALLOW": "ALLOW", "BLOCK": "BLOCK", "GENERALIZE": "REDACT"},
+        "phone": {"TRANSFORM": "REDACT", "ALLOW": "ALLOW", "BLOCK": "BLOCK", "GENERALIZE": "REDACT"},
+        "demographic": {"TRANSFORM": "GENERALIZE", "ALLOW": "ALLOW", "BLOCK": "BLOCK", "GENERALIZE": "GENERALIZE"},
+        "age": {"TRANSFORM": "GENERALIZE", "ALLOW": "ALLOW", "BLOCK": "BLOCK", "GENERALIZE": "GENERALIZE"},
+        "location": {"TRANSFORM": "GENERALIZE", "ALLOW": "ALLOW", "BLOCK": "BLOCK", "GENERALIZE": "GENERALIZE"},
+        "city": {"TRANSFORM": "GENERALIZE", "ALLOW": "ALLOW", "BLOCK": "BLOCK", "GENERALIZE": "GENERALIZE"},
+        "education": {"TRANSFORM": "GENERALIZE", "ALLOW": "ALLOW", "BLOCK": "BLOCK", "GENERALIZE": "GENERALIZE"},
+        "organization": {"TRANSFORM": "GENERALIZE", "ALLOW": "ALLOW", "BLOCK": "BLOCK", "GENERALIZE": "GENERALIZE"},
+        "health": {"TRANSFORM": "REDACT", "ALLOW": "ALLOW", "BLOCK": "BLOCK", "GENERALIZE": "REDACT"},
+        "financial": {"TRANSFORM": "REDACT", "ALLOW": "ALLOW", "BLOCK": "BLOCK", "GENERALIZE": "REDACT"},
+        "credential": {"TRANSFORM": "BLOCK", "ALLOW": "BLOCK", "BLOCK": "BLOCK", "GENERALIZE": "BLOCK"},
+        "task": {"TRANSFORM": "ALLOW", "ALLOW": "ALLOW", "BLOCK": "BLOCK", "GENERALIZE": "ALLOW"},
+        "context": {"TRANSFORM": "ALLOW", "ALLOW": "ALLOW", "BLOCK": "BLOCK", "GENERALIZE": "ALLOW"},
     },
     "destinations": {
-        "allow": ["nvidia", "nvidia_llm", "local", "assistant_context"],
+        "allow": ["nvidia", "nvidia_llm", "local", "assistant_context", "learn_pipeline", "training_aggregator"],
         "deny": ["external", "third_party_tool", "unregistered"],
     },
     "purposes": {
         "approved": [
             "answer_query", "personalization", "task_execution", "context",
-            "assistance", "chat",
+            "assistance", "chat", "model_finetuning", "federated_analytics", "rag_index_update",
+            "medical_report_analysis", "document_explanation", "document_analysis", "resume_analysis",
+            "image_generation",
         ],
-        "blocked": ["training", "analytics", "advertising", "third_party_sharing"],
+        "blocked": ["training_raw_pii", "advertising", "third_party_sharing", "unauthorized_analytics"],
     },
     "poisoning_thresholds": {"quarantine": 50, "block": 80},
     "ttl_default_days": {"LOW": 30, "MEDIUM": 14, "HIGH": 7, "CRITICAL": 0},
@@ -136,6 +139,9 @@ PURPOSE_LABELS = {
     "context": "Assistant context",
     "assistance": "Assistance",
     "chat": "Chat assistance",
+    "model_finetuning": "Model Fine-tuning / Training",
+    "federated_analytics": "Federated Analytics",
+    "rag_index_update": "RAG Index Update",
 }
 
 
@@ -144,7 +150,7 @@ class PolicyEngine:
         self._policy = None
 
     def load(self, policy: dict | None = None) -> dict:
-        self._policy = policy or DEFAULT_POLICY
+        self._policy = policy or copy.deepcopy(DEFAULT_POLICY)
         return self._policy
 
     @property
@@ -154,7 +160,29 @@ class PolicyEngine:
         return self._policy
 
     def version(self) -> str:
-        return self.policy["version"]
+        return self.policy.get("version", "v1.4")
+
+    def update(self, updates: dict) -> dict:
+        """Dynamically update policy rules, field strategies, or destinations."""
+        cur = copy.deepcopy(self.policy)
+        if "field_strategy" in updates:
+            cur["field_strategy"].update(updates["field_strategy"])
+        if "purpose_matrix" in updates:
+            cur["purpose_matrix"].update(updates["purpose_matrix"])
+        if "destinations" in updates:
+            cur["destinations"].update(updates["destinations"])
+        if "rules" in updates:
+            cur["rules"] = updates["rules"]
+        if "name" in updates:
+            cur["name"] = updates["name"]
+        cur["updated"] = time.strftime("%Y-%m-%d %H:%M:%S")
+        self._policy = cur
+        return self._policy
+
+    def reset(self) -> dict:
+        """Reset policy to default configuration."""
+        self._policy = copy.deepcopy(DEFAULT_POLICY)
+        return self._policy
 
     # ------------------------------------------------------------- evaluate
     def evaluate(
@@ -178,7 +206,6 @@ class PolicyEngine:
             return {
                 "passport.revocation_state": passport.revocation_state if passport else "NONE",
                 "passport.expired": bool(passport and passport.revocation_state == "EXPIRED"),
-                # no passport yet (write path): consent comes from the request
                 "passport.consent": (passport.consent if passport else
                                      (consent if consent is not None else "GRANTED")),
                 "destination.allowlist": (destination.lower() in p["destinations"]["allow"]),
@@ -220,10 +247,12 @@ class PolicyEngine:
             "location": "Exact location is unnecessary; a region suffices.",
             "city": "Exact location is unnecessary; a region suffices.",
             "education": "Exact education detail is unnecessary; a band suffices.",
+            "organization": "Exact organization name is generalized for privacy.",
             "health": "Health information is not required for this purpose.",
             "financial": "Financial information is not required for this purpose.",
             "credential": "Credentials must never leave the trusted boundary.",
             "task": "Task information is required for the requested purpose.",
+            "context": "Context approved for task.",
         }
 
         if overall == "BLOCK":

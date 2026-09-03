@@ -137,7 +137,12 @@ function PipelineTab({ trace, receipt, open, setOpen }) {
 
 function SecurityBoundary() {
   return (
-    <div className="boundary" role="img" aria-label="Security boundary — trusted zone above, external model below">
+    <div
+      className="boundary"
+      role="img"
+      aria-label="Security boundary — trusted zone above, external model below"
+      style={{ flexShrink: 0, margin: '12px 0 10px' }}
+    >
       <div className="boundary-line"><span>SECURITY BOUNDARY — only approved context crosses</span></div>
       <div className="boundary-sub">⬇ EXTERNAL MODEL ZONE ⬇</div>
     </div>
@@ -145,21 +150,118 @@ function SecurityBoundary() {
 }
 
 function Stage({ idx, stage, open, onToggle }) {
+  const title = STAGE_TITLES[stage.id] || stage.name
   return (
-    <div className="stage" style={open ? { borderColor: 'var(--border-2)' } : undefined}>
-      <button className="stage-head" onClick={onToggle} aria-expanded={open}
-        aria-label={`${STAGE_TITLES[stage.id] || stage.name} stage`}>
-        <span className="stage-num">{String(idx).padStart(2, '0')}</span>
+    <div
+      className="stage"
+      style={{
+        flexShrink: 0,
+        minHeight: 44,
+        width: '100%',
+        background: '#ffffff',
+        border: '1.5px solid var(--border-strong)',
+        borderRadius: 4,
+        boxShadow: open ? 'var(--brutal-shadow)' : 'var(--brutal-shadow-sm)',
+        marginBottom: 8,
+        overflow: 'hidden',
+        transition: 'all 0.08s ease',
+      }}
+    >
+      <button
+        type="button"
+        className="stage-head"
+        onClick={onToggle}
+        aria-expanded={open}
+        aria-label={`${title} stage`}
+        style={{
+          width: '100%',
+          minHeight: 42,
+          padding: '10px 14px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 10,
+          background: open ? 'var(--surface-alt)' : '#ffffff',
+          border: 'none',
+          cursor: 'pointer',
+          textAlign: 'left',
+          fontFamily: 'var(--font-sans)',
+          color: 'var(--ink)',
+        }}
+      >
+        <span
+          className="stage-num"
+          style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: 10,
+            fontWeight: 800,
+            color: 'var(--ink)',
+            background: 'var(--surface-alt)',
+            padding: '2px 6px',
+            borderRadius: 3,
+            border: '1px solid var(--border-strong)',
+            flexShrink: 0,
+          }}
+        >
+          {String(idx).padStart(2, '0')}
+        </span>
+
         <StageStatusIcon status={stage.status} />
-        <span className="stage-title">{STAGE_TITLES[stage.id] || stage.name}</span>
-        {stage.ms > 0 && <span className="stage-ms">{fmtMs(stage.ms)}</span>}
+
+        <span
+          className="stage-title"
+          style={{ fontFamily: 'var(--font-sans)', fontSize: 13, fontWeight: 700, color: 'var(--ink)', flex: 1 }}
+        >
+          {title}
+        </span>
+
+        {stage.ms > 0 && (
+          <span
+            className="stage-ms"
+            style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--faint)', flexShrink: 0 }}
+          >
+            {fmtMs(stage.ms)}
+          </span>
+        )}
+
         {stage.decision && <DecisionBadge decision={stage.decision} />}
-        <span className="stage-chevron" style={{ transform: open ? 'rotate(90deg)' : 'none' }}>▶</span>
+
+        <span
+          className="stage-chevron"
+          style={{
+            fontSize: 9,
+            color: 'var(--ink)',
+            transform: open ? 'rotate(90deg)' : 'none',
+            transition: 'transform 0.1s ease',
+            marginLeft: 6,
+            flexShrink: 0,
+          }}
+        >
+          ▶
+        </span>
       </button>
+
       {open && (
-        <div className="stage-body">
-          {stage.ts && <div className="stage-ts">⏱ {fmtTime(stage.ts)} · {fmtMs(stage.ms)}</div>}
-          {stage.explanation && <p className="explain">{stage.explanation}</p>}
+        <div
+          className="stage-body"
+          style={{
+            padding: '14px 16px',
+            borderTop: '1.5px solid var(--border-strong)',
+            background: 'var(--surface-alt)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 10,
+          }}
+        >
+          {stage.ts && (
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5, color: 'var(--faint)' }}>
+              ⏱ {fmtTime(stage.ts)} · {fmtMs(stage.ms)}
+            </div>
+          )}
+          {stage.explanation && (
+            <p style={{ fontSize: 12.5, color: 'var(--muted)', lineHeight: 1.55, margin: 0 }}>
+              {stage.explanation}
+            </p>
+          )}
           <StageContent stage={stage} />
         </div>
       )}
@@ -219,7 +321,7 @@ function StageContent({ stage }) {
           ]} />
           {out.text && (<>
             <SectionLabel>MODEL OUTPUT</SectionLabel>
-            <pre className="code-block" style={{ color: '#d3e3f7' }}>{out.text}</pre>
+            <pre className="code-block">{out.text}</pre>
           </>)}
         </>
       )
@@ -280,23 +382,37 @@ function MemoryContent({ out }) {
 function DetectionContent({ entities }) {
   const ents = entities || []
   if (!ents.length) {
-    return <p style={{ margin: 0 }}>No sensitive fields detected in this input.</p>
+    return <p style={{ margin: 0, fontSize: 13, color: 'var(--muted)' }}>No sensitive fields detected in this input.</p>
   }
   return (
     <>
       <SectionLabel>Sensitive attributes detected ({ents.length})</SectionLabel>
-      {ents.map((e, i) => (
-        <div className="entity-chip" key={i}>
-          <b>{e.entity}</b>
-          <span className="val">{e.value}</span>
-          <SensBadge level={e.sensitivity} />
-          <span style={{ color: 'var(--faint)', fontSize: 11 }}>{(e.confidence * 100).toFixed(0)}%</span>
+      <div className="entities-grid">
+        {ents.map((e, i) => (
+          <div className="entity-card" key={i}>
+            <div className="entity-card-header">
+              <span className="entity-name">{e.entity || e.type}</span>
+              <SensBadge level={e.sensitivity} />
+            </div>
+            <div className="entity-value mono">{e.value}</div>
+            <div className="entity-card-footer">
+              <span>Confidence: {(e.confidence * 100).toFixed(0)}%</span>
+              <span>{e.entity || e.type}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+      <div style={{ marginTop: 12 }}>
+        <SectionLabel>Detection analysis & context</SectionLabel>
+        <div className="detection-reasons-list">
+          {ents.slice(0, 8).map((e, i) => (
+            <div key={i} className="detection-reason-item">
+              <span className="entity-tag">{e.entity || e.type}</span>
+              <span className="reason-text">{e.reason || 'Pattern matched during zero-trust scan'}</span>
+            </div>
+          ))}
         </div>
-      ))}
-      <SectionLabel>Why these matter</SectionLabel>
-      <ul style={{ margin: 0, paddingLeft: 18, color: 'var(--ink-2)', fontSize: 12 }}>
-        {ents.slice(0, 6).map((e, i) => <li key={i}><b>{e.entity}</b> — {e.reason}</li>)}
-      </ul>
+      </div>
     </>
   )
 }
@@ -711,7 +827,7 @@ function PayloadTab({ trace, modelInput }) {
 
       <div className="card">
         <div className="card-title">MODEL RESPONSE</div>
-        <pre className="code-block" style={{ marginTop: 8, color: '#d3e3f7' }}>{respOut.text || '—'}</pre>
+        <pre className="code-block" style={{ marginTop: 8 }}>{respOut.text || '—'}</pre>
         <p style={{ fontSize: 11.5, color: 'var(--muted)', margin: '8px 0 0' }}>
           {respOut.demo ? 'Generated by the clearly-labelled DEMO provider (no NVIDIA_API_KEY configured).' : `Live response from ${respOut.model || 'NVIDIA'}.`}
         </p>

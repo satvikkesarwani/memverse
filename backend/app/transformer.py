@@ -1,12 +1,13 @@
-"""Field-level transformation engine.
+"""Field-level transformation engine for MEMVERSE.
 
 Deterministic transforms, applied field-by-field:
   ALLOW      -> keep value as-is
   SUPPRESS   -> generic placeholder by type (identity => "person")
-  GENERALIZE -> coarser representation (age band, region, education band)
+  GENERALIZE -> coarser representation (age band, region, education band, org band)
   REDACT     -> [REDACTED]
   TOKENIZE   -> persistent opaque token (local mapping table)
 """
+import re
 import time
 from models import ApprovedContext, ApprovedContextEntry
 
@@ -23,14 +24,16 @@ SUPPRESS_PLACEHOLDERS = {
     "credential": "[credential hidden]",
     "financial": "[financial info hidden]",
     "health": "[health info hidden]",
+    "organization": "[organization hidden]",
 }
 
 GENERALIZERS = {
     "age": lambda v: age_band(v),
     "demographic": lambda v: age_band(v),
-    "location": lambda v: region(v),
-    "city": lambda v: region(v),
+    "location": lambda v: location_region(v),
+    "city": lambda v: location_region(v),
     "education": lambda v: education_band(v),
+    "organization": lambda v: organization_band(v),
 }
 
 
@@ -46,22 +49,40 @@ def age_band(raw: str) -> str:
 
 
 def re_digits(v: str) -> str:
-    import re
     m = re.search(r"\d+", v)
     return m.group(0) if m else "0"
 
 
-def region(city: str) -> str:
+def location_region(location_text: str) -> str:
     from detector import CITIES
-    c = city.strip().lower()
-    return CITIES.get(c, "India")
+    low = location_text.strip().lower()
+    
+    # 1. Direct city match
+    if low in CITIES:
+        return f"{CITIES[low]}"
+    
+    # 2. Check if a known city is contained inside compound address (e.g. "Sector 137, Noida")
+    for city_name, reg in sorted(CITIES.items(), key=lambda x: len(x[0]), reverse=True):
+        if city_name in low:
+            return f"{city_name.title()} ({reg})"
+            
+    # 3. Sector / Street without city
+    if any(k in low for k in ("sector", "sec ", "phase", "plot", "street", "road", "block", "pincode", "pin")):
+        return "Local Sector/Area (India)"
+        
+    return "India"
+
+
+def region(city: str) -> str:
+    """Backwards-compatible alias for location_region."""
+    return location_region(city)
 
 
 def education_band(v: str) -> str:
     low = v.lower()
     if any(k in low for k in ("phd", "ph.d", "doctorate", "m.tech", "m.tech", "masters", "postgraduate", "pg ")):
         return "postgraduate"
-    if any(k in low for k in ("b.tech", "btech", "b.e", "bachelor", "engineering", "degree", "undergraduate")):
+    if any(k in low for k in ("b.tech", "btech", "b.e", "bachelor", "engineering", "degree", "undergraduate", "cs student", "computer science")):
         return "graduate/undergraduate"
     if any(k in low for k in ("12", "class 12", "higher secondary", "intermediate")):
         return "higher-secondary"
@@ -70,6 +91,15 @@ def education_band(v: str) -> str:
     if any(k in low for k in ("student", "school", "college")):
         return "student"
     return "education"
+
+
+def organization_band(v: str) -> str:
+    low = v.lower()
+    if any(k in low for k in ("iit", "iiit", "nit", "bits", "davv", "university", "college", "institute")):
+        return "Higher Education Institution"
+    if any(k in low for k in ("google", "microsoft", "amazon", "apple", "meta", "nvidia", "tcs", "infosys", "wipro", "accenture", "cognizant", "deloitte")):
+        return "Enterprise Technology Organization"
+    return "Organization"
 
 
 def transform_fields(fields: list, tokenizer=None) -> ApprovedContext:
@@ -89,7 +119,7 @@ def transform_fields(fields: list, tokenizer=None) -> ApprovedContext:
             excluded.append(raw)
             excluded_types[raw] = fd.type
         elif action == "GENERALIZE":
-            g = GENERALIZERS.get(fd.type)
+            g = GENERALIZERS.get(fd.type) or GENERALIZERS.get(fd.field.lower())
             val = g(raw) if g else f"{raw} (approx.)"
             excluded.append(raw)
             excluded_types[raw] = fd.type
@@ -105,8 +135,10 @@ def transform_fields(fields: list, tokenizer=None) -> ApprovedContext:
             excluded.append(raw)
             excluded_types[raw] = fd.type
         else:  # BLOCK
+            fd.output = "[BLOCKED]"
             continue  # field not allowed to leave at all
 
+        fd.output = val
         entries.append(ApprovedContextEntry(
             field=fd.field, type=fd.type, value=val, sensitivity=fd.sensitivity,
         ))

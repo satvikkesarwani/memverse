@@ -5,21 +5,26 @@ endpoint that writes/reads memory or calls the model outside the gateway.
 """
 import json
 import os
+import re
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, FileResponse
+from fastapi.responses import JSONResponse, FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+import document_parser
+
 load_dotenv(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env"))
 
+import db
 from db import init_db, q
 from gateway import MemverseGateway, list_messages
 import auditlog
 import receipts as receipts_mod
 import policy as policy_mod
 import memory as memory_store
+import persona as persona_mod
 import security_tests
 
 app = FastAPI(title="MEMVERSE Gateway API", version="1.4.0")
@@ -116,6 +121,159 @@ def chat(req: ChatRequest):
     return JSONResponse(content=result.model_dump())
 
 
+@app.post("/api/chat/stream")
+def chat_stream(req: ChatRequest):
+    req.prompt = ChatRequest.validate_prompt(req.prompt)
+
+    def event_generator():
+        for event in GATEWAY.process_chat_stream(
+            prompt=req.prompt,
+            conversation_id=req.conversation_id or None,
+            purpose=req.purpose,
+            destination=req.destination,
+        ):
+            yield f"data: {json.dumps(event)}\n\n"
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+@app.get("/api/documents/samples")
+def document_samples():
+    """List built-in sample diagnostic reports for instant demonstration."""
+    samples = []
+    for key, data in document_parser.SAMPLE_REPORTS.items():
+        samples.append({
+            "id": key,
+            "title": data["title"],
+            "filename": data["filename"],
+            "preview": data["text"][:260] + "...",
+            "char_count": len(data["text"]),
+        })
+    return {"samples": samples}
+
+
+@app.post("/api/chat/document")
+async def chat_document(
+    file: UploadFile = File(None),
+    sample_id: str = Form(None),
+    prompt: str = Form("Please analyze and summarize this document, highlighting key information while preserving privacy."),
+    conversation_id: str = Form(""),
+    purpose: str = Form("document_analysis"),
+    destination: str = Form("nvidia"),
+):
+    """Document Analysis with Zero-Trust PII Redaction."""
+    doc_text = ""
+    filename = "document.pdf"
+    pages = 1
+
+    if file:
+        filename = file.filename
+        content = await file.read()
+        parsed = document_parser.parse_document_file(content, filename)
+        if not parsed["success"]:
+            raise HTTPException(400, parsed["error"])
+        doc_text = parsed["text"]
+        pages = parsed.get("pages", 1)
+    elif sample_id and sample_id in document_parser.SAMPLE_REPORTS:
+        sample = document_parser.SAMPLE_REPORTS[sample_id]
+        doc_text = sample["text"]
+        filename = sample["filename"]
+    else:
+        raise HTTPException(400, "Please upload a document file or select a sample report ID.")
+
+    # Sanitize filename in prompt header so names in filenames (e.g. slice_satvik.pdf) don't leak
+    clean_header_name = re.sub(r"[_\-.]+", " ", filename).strip()
+    safe_filename = "document.pdf" if any(len(part) > 3 for part in clean_header_name.split()) else filename
+
+    full_prompt = (
+        f"{prompt.strip()}\n\n"
+        f"--- ATTACHED DOCUMENT ({safe_filename}) ---\n"
+        f"{doc_text}"
+    )
+
+    result = GATEWAY.process_chat(
+        prompt=full_prompt,
+        conversation_id=conversation_id or None,
+        purpose=purpose,
+        destination=destination,
+    )
+
+    res_dict = result.model_dump()
+    res_dict["document"] = {
+        "filename": filename,
+        "pages": pages,
+        "char_count": len(doc_text),
+        "sample_id": sample_id or None,
+    }
+    return JSONResponse(content=res_dict)
+
+
+@app.post("/api/chat/document/stream")
+async def chat_document_stream(
+    file: UploadFile = File(None),
+    sample_id: str = Form(None),
+    prompt: str = Form("Please analyze and summarize this document, highlighting key information while preserving privacy."),
+    conversation_id: str = Form(""),
+    purpose: str = Form("document_analysis"),
+    destination: str = Form("nvidia"),
+):
+    """Streaming Document Analysis with Zero-Trust PII Redaction."""
+    doc_text = ""
+    filename = "document.pdf"
+    pages = 1
+
+    if file:
+        filename = file.filename
+        content = await file.read()
+        parsed = document_parser.parse_document_file(content, filename)
+        if not parsed["success"]:
+            raise HTTPException(400, parsed["error"])
+        doc_text = parsed["text"]
+        pages = parsed.get("pages", 1)
+    elif sample_id and sample_id in document_parser.SAMPLE_REPORTS:
+        sample = document_parser.SAMPLE_REPORTS[sample_id]
+        doc_text = sample["text"]
+        filename = sample["filename"]
+    else:
+        raise HTTPException(400, "Please upload a document file or select a sample report ID.")
+
+    # Sanitize filename in prompt header so names in filenames (e.g. slice_satvik.pdf) don't leak
+    clean_header_name = re.sub(r"[_\-.]+", " ", filename).strip()
+    safe_filename = "document.pdf" if any(len(part) > 3 for part in clean_header_name.split()) else filename
+
+    full_prompt = (
+        f"{prompt.strip()}\n\n"
+        f"--- ATTACHED DOCUMENT ({safe_filename}) ---\n"
+        f"{doc_text}"
+    )
+
+    def event_generator():
+        for event in GATEWAY.process_chat_stream(
+            prompt=full_prompt,
+            conversation_id=conversation_id or None,
+            purpose=purpose,
+            destination=destination,
+        ):
+            if event["type"] == "done":
+                event["result"]["document"] = {
+                    "filename": filename,
+                    "pages": pages,
+                    "char_count": len(doc_text),
+                    "sample_id": sample_id or None,
+                }
+            yield f"data: {json.dumps(event)}\n\n"
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
 @app.get("/api/messages")
 def messages(conversation_id: str = ""):
     return list_messages(conversation_id or None)
@@ -209,6 +367,130 @@ def policy_current():
     return policy_mod.ENGINE.policy
 
 
+@app.post("/api/policies/update")
+def policy_update(body: dict):
+    """Dynamically update policy rules, field strategies, or destinations."""
+    updated = policy_mod.ENGINE.update(body)
+    return {"status": "updated", "policy": updated}
+
+
+@app.post("/api/policies/reset")
+def policy_reset():
+    """Reset policy to default configuration."""
+    reset = policy_mod.ENGINE.reset()
+    return {"status": "reset", "policy": reset}
+
+
+# ------------------------------------------------------------------- learn
+@app.post("/api/learn/export")
+def learn_export(body: dict = None):
+    """LEARN Control Surface — evaluate stored memories for dataset export / training.
+
+    Filters out memories where:
+      - passport is REVOKED, EXPIRED, or QUARANTINED
+      - consent is NOT_GRANTED for learning
+      - sensitivity is HIGH or CRITICAL
+    Transforms eligible memories using differential privacy / generalization.
+    Generates a tamper-evident LEARN_EXPORT receipt in the ledger.
+    """
+    import transformer as transformer_mod
+    import detector as detector_mod
+
+    body = body or {}
+    purpose = body.get("purpose", "model_finetuning")
+    destination = body.get("destination", "learn_pipeline")
+    epsilon = float(body.get("privacy_budget_epsilon", 0.5))
+
+    all_memories = memory_store.list_memories()
+    eligible_records = []
+    excluded_records = []
+
+    for m in all_memories:
+        p = m.passport
+        if not p or p.revocation_state != "ACTIVE":
+            excluded_records.append({
+                "memory_id": m.memory_id,
+                "reason": f"Passport state '{p.revocation_state if p else 'NONE'}' — fail closed",
+                "sensitivity": m.sensitivity,
+            })
+            continue
+        if m.sensitivity in ("HIGH", "CRITICAL"):
+            excluded_records.append({
+                "memory_id": m.memory_id,
+                "reason": f"High sensitivity ({m.sensitivity}) prohibited from learning dataset",
+                "sensitivity": m.sensitivity,
+            })
+            continue
+
+        entities = [detector_mod.DetectedEntity(
+            entity=f.get("field", "Item"),
+            value=f.get("value", ""),
+            type=f.get("type", "context"),
+            sensitivity=f.get("sensitivity", "LOW"),
+            confidence=1.0,
+            reason="Stored memory field",
+        ) for f in m.payload]
+
+        dec = policy_mod.ENGINE.evaluate(
+            operation="LEARN", purpose=purpose, destination=destination,
+            passport=p, poisoning_level="LOW", entities=entities,
+        )
+
+        if dec.overall == "BLOCK":
+            excluded_records.append({
+                "memory_id": m.memory_id,
+                "reason": dec.reason,
+                "sensitivity": m.sensitivity,
+            })
+            continue
+
+        ctx = transformer_mod.transform_fields(dec.per_field)
+        eligible_records.append({
+            "memory_id": m.memory_id,
+            "original_type": m.mem_type,
+            "generalized_payload": [e.model_dump() for e in ctx.entries],
+            "anonymized_text": ctx.assembly,
+            "sensitivity": m.sensitivity,
+            "noise_scale": round(1.0 / max(0.01, epsilon), 3),
+        })
+
+    evt = {
+        "event_id": db.new_id("evt"),
+        "event_type": "LEARN_EXPORT",
+        "timestamp": db.now_iso(),
+        "purpose": purpose,
+        "destination": destination,
+        "decision": "ALLOW" if eligible_records else "BLOCK",
+        "fields_detected": len(all_memories),
+        "fields_transformed": len(eligible_records),
+        "policy_version": policy_mod.ENGINE.version(),
+        "passport_id": "DATASET_BATCH",
+        "revocation_state": "ACTIVE",
+        "extra": {
+            "total_candidates": len(all_memories),
+            "eligible_count": len(eligible_records),
+            "excluded_count": len(excluded_records),
+            "privacy_budget_epsilon": epsilon,
+        }
+    }
+    receipt = receipts_mod.create_receipt(evt)
+    auditlog.receipt_created("", 0, "", 0, receipt.event_id, "LEARN_EXPORT", receipt.decision)
+
+    return {
+        "status": "success",
+        "operation": "LEARN",
+        "purpose": purpose,
+        "destination": destination,
+        "total_candidates": len(all_memories),
+        "eligible_count": len(eligible_records),
+        "excluded_count": len(excluded_records),
+        "privacy_budget_epsilon": epsilon,
+        "eligible_records": eligible_records,
+        "excluded_records": excluded_records,
+        "receipt": receipt.model_dump(),
+    }
+
+
 # ---------------------------------------------------------------- security
 @app.post("/api/security/test")
 def security_test(body: dict):
@@ -231,27 +513,42 @@ def audit_logs(limit: int = 100):
     return {"logs": auditlog.recent(min(limit, 500))}
 
 
+# ----------------------------------------------------------- persona vault
+@app.get("/api/persona")
+def get_persona():
+    """Returns all persona attributes currently stored in the Global Persona Vault."""
+    return {"attributes": persona_mod.get_all_persona_attributes()}
+
+
+@app.delete("/api/persona/{attr_id}")
+def delete_persona_attr(attr_id: str):
+    """Deletes a specific persona attribute from the vault."""
+    persona_mod.delete_persona_attribute(attr_id)
+    return {"status": "deleted", "id": attr_id}
+
+
+@app.post("/api/persona/wipe")
+def wipe_persona():
+    """Wipes the persona vault and resets memory store to zero clean state."""
+    persona_mod.wipe_persona_vault()
+    memory_store.reset_demo()
+    return {"status": "wiped", "last_receipt_hash": "GENESIS"}
+
+
 # -------------------------------------------------------------------- demo
 @app.post("/api/demo/seed")
 def demo_seed():
-    """Seed the demo dataset (fictional demo user 'Alex') — runs the real write pipeline."""
+    """Seed the demo dataset — runs the real write pipeline."""
     result = GATEWAY.process_memory_write(
         text="My name is Alex. I'm 24 years old and I'm a computer science student from Delhi.",
         purpose="personalization", destination="assistant_context", consent=True, system=True,
-    )
-    GATEWAY.process_memory_write(
-        text="I mostly use Python and I'm into AI and machine learning.",
-        purpose="personalization", destination="assistant_context", consent=True, system=True,
-    )
-    GATEWAY.process_memory_write(
-        text="I am looking for a software engineering internship next summer.",
-        purpose="task_execution", destination="assistant_context", consent=True, system=True,
     )
     return JSONResponse(content=result.model_dump())
 
 
 @app.post("/api/demo/reset")
 def demo_reset():
+    persona_mod.wipe_persona_vault()
     memory_store.reset_demo()
     return {"status": "reset", "last_receipt_hash": "GENESIS"}
 
@@ -273,7 +570,14 @@ STATIC_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file
 def index():
     idx = os.path.join(STATIC_DIR, "index.html")
     if os.path.exists(idx):
-        return FileResponse(idx)
+        return FileResponse(
+            idx,
+            headers={
+                "Cache-Control": "no-cache, no-store, must-revalidate",
+                "Pragma": "no-cache",
+                "Expires": "0",
+            },
+        )
     return JSONResponse({"service": "MEMVERSE Gateway API", "frontend": "run `npm run build` in /frontend"})
 
 

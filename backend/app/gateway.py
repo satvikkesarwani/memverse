@@ -25,6 +25,7 @@ import passport as passport_mod
 import memory as memory_store
 import egress as egress_mod
 import receipts as receipts_mod
+import persona as persona_mod
 import auditlog
 from models import (
     RequestTrace, TraceStage, Receipt, ApprovedContext, EgressResult,
@@ -37,9 +38,10 @@ POLICY_VERSION = "v1.4"
 
 SYSTEM_INSTRUCTIONS = (
     "You are a helpful AI assistant operating inside the MEMVERSE zero-trust memory gateway. "
-    "The memory context below is the ONLY personal information MEMVERSE approved for this request. "
-    "Do not claim to know anything about the user beyond it. "
-    "Never ask for or infer the user's exact identity, age, contact, or financial details."
+    "The memory context below is the ONLY personal background approved for this request. "
+    "CRITICAL USAGE RULE: Use this background context ONLY when it is directly relevant to answering the user's question. "
+    "Do NOT recite, repeat, or regurgitate this context unnecessarily unless the user explicitly asks about it. "
+    "Do not claim to know anything about the user beyond it, and never ask for exact personal identity."
 )
 
 
@@ -56,6 +58,8 @@ def _ent(d, field_key: str = "entity") -> SimpleNamespace:
 class MemverseGateway:
     def __init__(self):
         init_db()
+        from persona import init_persona
+        init_persona()
         self.policy_engine = policy_mod.PolicyEngine()
         self.policy_engine.load()
         self._provider = None
@@ -116,6 +120,13 @@ class MemverseGateway:
         ))
         auditlog.sensitive_detected(request_id, req_num, "", 0, len(det.entities),
                                     sorted({e.type for e in det.entities}), det.ms)
+
+        # Auto-harvest entities into Global Persona Vault
+        if det.entities:
+            try:
+                persona_mod.harvest_entities(det.entities, prompt_text=text)
+            except Exception:
+                pass
 
         # ---- 03 DEFEND
         t = time.perf_counter()
@@ -360,6 +371,13 @@ class MemverseGateway:
         auditlog.sensitive_detected(request_id, req_num, conv, session_num, len(det.entities),
                                     sorted({e.type for e in det.entities}), det.ms)
 
+        # Auto-harvest detected entities into Global Persona Vault
+        if det.entities:
+            try:
+                persona_mod.harvest_entities(det.entities, prompt_text=prompt)
+            except Exception:
+                pass
+
         # 03 DEFEND
         t = time.perf_counter()
         poi = poisoning.analyze(prompt)
@@ -521,6 +539,9 @@ class MemverseGateway:
             # 08 CONTEXT
             sanitized_prompt = _sanitize_prompt(prompt, decision.per_field, det.entities)
             system = SYSTEM_INSTRUCTIONS
+            persona_scaffolding = persona_mod.build_semantic_persona_context()
+            if persona_scaffolding:
+                system += f"\n\n{persona_scaffolding}"
             if context.assembly:
                 system += f"\n\nAPPROVED MEMORY CONTEXT:\n{context.assembly}"
             messages = [
@@ -699,6 +720,420 @@ class MemverseGateway:
             model_output=llm_out.get("text", "") if not blocked else "",
             blocked=blocked,
         )
+
+    def process_chat_stream(
+        self,
+        prompt: str,
+        conversation_id: str | None = None,
+        purpose: str = "answer_query",
+        destination: str = "nvidia",
+    ):
+        """Streaming chat: runs zero-trust stages 1-9, streams LLM tokens in real-time, then produces signed trace & receipt."""
+        # ---- route memory declarations to the WRITE pipeline
+        if _is_memory_declaration(prompt):
+            res = self.process_chat(prompt, conversation_id=conversation_id, purpose=purpose, destination=destination)
+            yield {"type": "delta", "text": res.response_text}
+            yield {"type": "done", "result": res.model_dump()}
+            return
+
+        # ---- standard REVEAL pipeline
+        request_id = new_id("req")
+        req_num = self._next_request_number()
+        conv, session_num = self._ensure_conversation(conversation_id)
+        ts = now_iso()
+        stages: list[TraceStage] = []
+
+        # 01 REQUEST
+        stages.append(TraceStage(
+            id="request", name="Request", status="ok", ms=0, ts=ts,
+            input={"request_id": request_id, "conversation_id": conv, "timestamp": ts,
+                   "operation": "REVEAL", "purpose": purpose, "destination": destination,
+                   "prompt": prompt, "input_length": len(prompt)},
+            output={"operation": "REVEAL", "purpose": purpose, "destination": destination,
+                    "actor": "user", "destination_label": destination},
+            explanation="Chat request captured at the gateway. The model will only ever see the approved context produced below.",
+        ))
+        auditlog.request_received(request_id, req_num, conv, session_num, "REVEAL", len(prompt))
+
+        # 02 DETECT
+        t = time.perf_counter()
+        det = detector.detect_all(prompt, source="user_prompt")
+        stages.append(TraceStage(
+            id="detect", name="Detection", status="ok", ms=det.ms, ts=now_iso(),
+            input={"prompt": prompt},
+            output={"entities": [e.model_dump() for e in det.entities], "count": len(det.entities)},
+            explanation="Sensitive-data detection ran over the user prompt.",
+            fields=[e.model_dump() for e in det.entities],
+        ))
+        auditlog.sensitive_detected(request_id, req_num, conv, session_num, len(det.entities),
+                                    sorted({e.type for e in det.entities}), det.ms)
+
+        # Auto-harvest detected entities into Global Persona Vault
+        if det.entities:
+            try:
+                persona_mod.harvest_entities(det.entities, prompt_text=prompt)
+            except Exception:
+                pass
+
+        # 03 DEFEND
+        t = time.perf_counter()
+        poi = poisoning.analyze(prompt)
+        stages.append(TraceStage(
+            id="defend", name="Poisoning Defense", status=(
+                "blocked" if poi.risk_level in ("HIGH", "CRITICAL") else
+                ("warn" if poi.risk_level == "MEDIUM" else "ok")),
+            ms=poi.ms, ts=now_iso(),
+            input={"prompt": prompt},
+            output={"risk_score": poi.risk_score, "risk_level": poi.risk_level,
+                    "action": poi.action,
+                    "matched_patterns": [m.model_dump() for m in poi.matched_patterns],
+                    "reason": poi.reason},
+            explanation=poi.reason, decision=poi.action,
+        ))
+        auditlog.poisoning_scored(request_id, req_num, conv, session_num, poi.risk_level, poi.risk_score, poi.ms)
+
+        # 04 MEMORY RETRIEVAL + passport validation
+        t = time.perf_counter()
+        eligible, denied = self._retrieve_memories(purpose, destination)
+        mem_ms = (time.perf_counter() - t) * 1000
+        stages.append(TraceStage(
+            id="memory", name="Memory Retrieval", status=(
+                "ok" if eligible else ("warn" if denied else "info")), ms=mem_ms, ts=now_iso(),
+            input={"candidates": [m.memory_id for m in memory_store.list_memories()]},
+            output={
+                "eligible": [{
+                    "memory_id": m.memory_id, "status": m.status,
+                    "passport_state": m.passport.revocation_state if m.passport else "NONE",
+                    "sensitivity": m.sensitivity, "purpose": m.purpose,
+                    "created_at": m.created_at, "last_access": m.last_access,
+                    "ttl_days": m.ttl_days,
+                    "fields": [{"field": f.get("field"), "value": f.get("value"),
+                                "sensitivity": f.get("sensitivity")} for f in m.payload],
+                } for m in eligible],
+                "denied": [{"memory_id": m.memory_id, "status": m.status,
+                            "reason": d} for m, d in denied],
+            },
+            explanation=(
+                "Every candidate memory's Passport was validated: revocation state, TTL/expiry, "
+                "consent and integrity. Ineligible memories fail closed and are excluded."
+                if (eligible or denied) else
+                "No memories exist yet. Only the (transformed) user prompt will reach the model."),
+        ))
+        auditlog.memory_retrieved(request_id, req_num, conv, session_num, len(eligible), len(denied), mem_ms)
+
+        # 05 POLICY
+        memory_entities = []
+        for m in eligible:
+            for f in m.payload:
+                memory_entities.append(_ent(f, field_key="field"))
+        prompt_entities = list(det.entities)
+        all_entities = memory_entities + prompt_entities
+        t = time.perf_counter()
+        try:
+            decision = self.policy_engine.evaluate(
+                operation="REVEAL", purpose=purpose, destination=destination,
+                passport=eligible[0].passport if eligible else None,
+                poisoning_level=poi.risk_level, entities=all_entities, gateway_error=False,
+            )
+        except Exception as e:
+            decision = PolicyDecision(overall="BLOCK", reason=f"Policy evaluation failed — fail closed: {e}",
+                                      policy_version=POLICY_VERSION, matched_rules=[], per_field=[])
+        stages.append(TraceStage(
+            id="policy", name="Policy Engine", status=(
+                "blocked" if decision.overall in ("BLOCK", "QUARANTINE") else "ok"),
+            ms=decision.ms, ts=now_iso(),
+            input={"operation": "REVEAL", "purpose": purpose, "destination": destination,
+                   "passport_state": eligible[0].passport.revocation_state if eligible else "NONE",
+                   "poisoning_level": poi.risk_level,
+                   "policy_version": decision.policy_version},
+            output={"decision": decision.overall, "reason": decision.reason,
+                    "matched_rules": decision.matched_rules,
+                    "per_field": [f.model_dump() for f in decision.per_field]},
+            explanation=decision.reason, decision=decision.overall,
+            policy_version=decision.policy_version,
+        ))
+        auditlog.policy_evaluated(request_id, req_num, conv, session_num, decision.overall,
+                                  decision.policy_version,
+                                  [r.get("rule_id", "") for r in decision.matched_rules], decision.ms)
+
+        # ---- RETRIEVAL-DENIED fail-closed
+        retrieval_denied = (
+            not eligible
+            and bool(denied)
+            and _asks_about_memory(prompt)
+            and poi.risk_level not in ("HIGH", "CRITICAL")
+        )
+        if retrieval_denied:
+            _, denial_reason = denied[0]
+            denial_msg = (f"⛔ RETRIEVAL DENIED — FAIL CLOSED\n\n{denial_reason}.\n\n"
+                          f"{len(denied)} memory record(s) were denied at the Passport stage. "
+                          "No memory context was released to the model.")
+            decision = PolicyDecision(
+                overall="BLOCK", reason=denial_msg,
+                policy_version=decision.policy_version, matched_rules=[], per_field=[])
+            stages.append(TraceStage(
+                id="context", name="Approved Context", status="blocked", ms=0, ts=now_iso(),
+                input={"denied": [{"memory_id": m.memory_id, "reason": d} for m, d in denied]},
+                output={"assembly": "", "reason": denial_reason},
+                explanation="Retrieval failed closed — no approved context was assembled.",
+                decision="BLOCK",
+            ))
+            auditlog.request_blocked(request_id, req_num, conv, session_num, denial_reason)
+            egr = EgressResult(status="PASS", checks=[], prohibited_fields=0, ms=0)
+            stages.append(TraceStage(
+                id="llm_gate", name="LLM Gate (Egress)", status="blocked", ms=0, ts=now_iso(),
+                input={"blocked_before_egress": True},
+                output={"status": "NOT REACHED", "reason": "retrieval denied"},
+                explanation="No payload to validate — the model was never offered any memory context.",
+                decision="BLOCK",
+            ))
+        else:
+            # 06 TRANSFORM
+            t = time.perf_counter()
+            context = transformer_mod.transform_fields(decision.per_field)
+            stages.append(TraceStage(
+                id="transform", name="Transformation", status=(
+                    "blocked" if decision.overall in ("BLOCK", "QUARANTINE") else "ok"), ms=context.ms, ts=now_iso(),
+                input={"per_field": [f.model_dump() for f in decision.per_field]},
+                output={"approved_entries": [e.model_dump() for e in context.entries],
+                        "excluded_raw": context.excluded_raw_values},
+                explanation=(
+                    "Field-level transformations applied: SUPPRESS / GENERALIZE / REDACT per the policy matrix. "
+                    "Raw values are withheld from the model." if context.entries else
+                    "No fields to transform."),
+                fields=[f.model_dump() for f in decision.per_field],
+                decision=decision.overall, policy_version=decision.policy_version,
+            ))
+            auditlog.transformation_applied(request_id, req_num, conv, session_num,
+                                            sum(1 for f in decision.per_field if f.action != "ALLOW"),
+                                            context.ms)
+
+            # 07 PASSPORT
+            if eligible:
+                p = eligible[0].passport
+                stages.append(TraceStage(
+                    id="passport", name="Model Passport", status="ok", ms=0, ts=now_iso(),
+                    input={"memory_id": eligible[0].memory_id},
+                    output=p.model_dump() if p else None,
+                    explanation=(
+                        "This Memory Passport defines the subset the external model is authorized to "
+                        "receive: purpose, consent, destination, TTL and revocation state."),
+                    policy_version=p.policy_version if p else decision.policy_version,
+                ))
+                auditlog.passport_event(request_id, req_num, conv, session_num, "VALIDATED",
+                                        eligible[0].memory_id, p.revocation_state if p else "ACTIVE")
+            else:
+                stages.append(TraceStage(
+                    id="passport", name="Model Passport", status="info", ms=0, ts=now_iso(),
+                    input={},
+                    output={"passport": None, "reason": "No memory used — prompt-only request."},
+                    explanation="No memory passport was involved because no memory was retrieved.",
+                    decision="ALLOW",
+                ))
+                auditlog.passport_event(request_id, req_num, conv, session_num, "NONE", "", "NONE")
+
+            # 08 CONTEXT
+            sanitized_prompt = _sanitize_prompt(prompt, decision.per_field, det.entities)
+            system = SYSTEM_INSTRUCTIONS
+            persona_scaffolding = persona_mod.build_semantic_persona_context()
+            if persona_scaffolding:
+                system += f"\n\n{persona_scaffolding}"
+            if context.assembly:
+                system += f"\n\nAPPROVED MEMORY CONTEXT:\n{context.assembly}"
+            messages = [
+                {"role": "system", "content": system},
+                {"role": "user", "content": sanitized_prompt},
+            ]
+            stages.append(TraceStage(
+                id="context", name="Approved Context", status="ok", ms=0, ts=now_iso(),
+                input={"raw_memory": [{"field": f.get("field"), "type": f.get("type"),
+                                       "value": f.get("value"), "sensitivity": f.get("sensitivity")}
+                                      for f in (eligible[0].payload if eligible else [])]},
+                output={"assembly": context.assembly, "sanitized_prompt": sanitized_prompt},
+                explanation="The exact context block the model will receive. Raw memory values never enter this block.",
+            ))
+            auditlog.payload_created(request_id, req_num, conv, session_num,
+                                     len(context.assembly), len(sanitized_prompt))
+
+            # 09 LLM GATE (egress)
+            t = time.perf_counter()
+            egr = egress_mod.validate(context, destination, purpose)
+            egr_all_text = " ".join(m["content"] for m in messages)
+            if _recheck_prohibited(egr_all_text):
+                egr.status = "FAIL"
+                egr.prohibited_fields += 1
+            egr.ms = (time.perf_counter() - t) * 1000
+            stages.append(TraceStage(
+                id="llm_gate", name="LLM Gate (Egress)", status=(
+                    "blocked" if egr.status == "FAIL" else "ok"), ms=egr.ms, ts=now_iso(),
+                input={"destination": destination, "purpose": purpose,
+                       "payload": messages},
+                output={"status": egr.status, "checks": [c.model_dump() for c in egr.checks],
+                        "prohibited_fields": egr.prohibited_fields},
+                explanation=(
+                    "Final egress validation before anything leaves the trusted boundary. "
+                    "If a prohibited field is found, the model request is BLOCKED."),
+                decision=egr.status, policy_version=decision.policy_version,
+            ))
+            auditlog.egress_validated(request_id, req_num, conv, session_num,
+                                      egr.status, egr.prohibited_fields, egr.ms)
+
+        # 10 LLM
+        blocked = (decision.overall in ("BLOCK", "QUARANTINE")) or egr.status == "FAIL" or poi.risk_level == "CRITICAL" or retrieval_denied
+        llm_out = None
+        if not blocked:
+            payload_hash = hashlib.sha256(json.dumps(messages, sort_keys=True).encode()).hexdigest()
+            t_llm = time.perf_counter()
+            pieces = []
+            try:
+                for piece in self.provider().generate_stream(messages, purpose=purpose, request_id=request_id, request_number=req_num):
+                    pieces.append(piece)
+                    yield {"type": "delta", "text": piece}
+                full_text = "".join(pieces).strip()
+                llm_latency = (time.perf_counter() - t_llm) * 1000
+                llm_out = {
+                    "text": full_text,
+                    "provider": "nvidia" if os.environ.get("NVIDIA_API_KEY") else "demo",
+                    "model": getattr(self.provider(), "model", "nvidia/nemotron-3.5-lightning-30b-a3b"),
+                    "latency_ms": llm_latency,
+                    "demo": not bool(os.environ.get("NVIDIA_API_KEY")),
+                    "error": "",
+                }
+                stages.append(TraceStage(
+                    id="llm", name="External Model", status="ok", ms=llm_out.get("latency_ms", 0), ts=now_iso(),
+                    input={"provider": "nvidia", "model": llm_out.get("model", ""),
+                           "request_id": request_id},
+                    output={"status": "SENT", "destination": destination,
+                            "request_id": request_id, "timestamp": now_iso(),
+                            "payload_hash": payload_hash,
+                            "provider": llm_out.get("provider"),
+                            "model": llm_out.get("model"),
+                            "payload": messages,
+                            "latency_ms": llm_out.get("latency_ms", 0)},
+                    explanation="Approved payload crossed the security boundary and reached the external model.",
+                    decision="SENT",
+                ))
+            except Exception as e:
+                err_text = (f"⚠ LLM CONNECTION FAILED\n\nNVIDIA endpoint unreachable: {e}\n\n"
+                            "MEMVERSE's security decision still stands — the trace and receipt remain valid. "
+                            "Set NVIDIA_API_KEY to enable live generation.")
+                llm_out = {
+                    "text": err_text,
+                    "provider": "nvidia", "model": "—", "latency_ms": 0, "demo": False,
+                    "error": str(e),
+                }
+                yield {"type": "delta", "text": err_text}
+                stages.append(TraceStage(
+                    id="llm", name="External Model", status="error", ms=0, ts=now_iso(),
+                    input={"provider": "nvidia", "model": "—", "request_id": request_id},
+                    output={"status": "FAILED", "destination": destination,
+                            "request_id": request_id, "timestamp": now_iso(),
+                            "payload_hash": payload_hash,
+                            "error": str(e), "payload": messages},
+                    explanation=("The approved payload was ready but the external model was unreachable. "
+                                 "No raw memory was exposed — fail-safe."),
+                    decision="FAILED",
+                ))
+        else:
+            if decision.overall in ("BLOCK", "QUARANTINE"):
+                denial = decision.reason
+                if poi.risk_level in ("HIGH", "CRITICAL") and "poison" not in denial.lower():
+                    denial = "Input scored HIGH/CRITICAL on the poisoning detector. Request blocked, fail closed."
+            elif egr.status == "FAIL":
+                denial = "Egress validation failed — prohibited content detected in payload. Model request blocked."
+            elif retrieval_denied:
+                denial = denial_msg
+            else:
+                denial = decision.reason
+            blocked_text = (denial if retrieval_denied else f"⛔ MEMVERSE BLOCKED THIS REQUEST\n\n{denial}")
+            llm_out = {
+                "text": blocked_text,
+                "provider": "gateway", "model": "—", "latency_ms": 0, "demo": False, "error": "",
+            }
+            yield {"type": "delta", "text": blocked_text}
+            stages.append(TraceStage(
+                id="llm", name="External Model", status="blocked", ms=0, ts=now_iso(),
+                input={"blocked": True, "reason": denial},
+                output={"status": "NOT SENT", "destination": destination,
+                        "request_id": request_id, "timestamp": now_iso(),
+                        "reason": denial},
+                explanation="The model was never contacted. The gateway fails closed.",
+                decision="NOT SENT",
+            ))
+            auditlog.request_blocked(request_id, req_num, conv, session_num, denial)
+
+        # 11 RESPONSE
+        stages.append(TraceStage(
+            id="response", name="Response", status="ok", ms=llm_out.get("latency_ms", 0), ts=now_iso(),
+            input={"provider": llm_out.get("provider"), "model": llm_out.get("model")},
+            output={"text": llm_out.get("text", ""), "demo": llm_out.get("demo", False)},
+            explanation=("Model output captured. User sees this response; the trace proves what the model "
+                         "was allowed to see."),
+        ))
+
+        # 12 RECEIPT
+        fields_transformed = sum(1 for f in decision.per_field if f.action != "ALLOW")
+        evt = {
+            "event_id": new_id("evt"), "event_type": "CHAT_REQUEST",
+            "timestamp": now_iso(), "purpose": purpose, "destination": destination,
+            "decision": decision.overall if not blocked else "BLOCK",
+            "fields_detected": len(det.entities) + len(memory_entities),
+            "fields_transformed": fields_transformed,
+            "policy_version": decision.policy_version,
+            "passport_id": eligible[0].memory_id if eligible else "",
+            "revocation_state": eligible[0].passport.revocation_state if eligible else "NONE",
+            "extra": {"request_id": request_id, "poisoning_risk": poi.risk_level,
+                      "poisoning_score": poi.risk_score,
+                      "llm_provider": llm_out.get("provider"),
+                      "llm_status": _llm_status(stages),
+                      "egress": egr.status, "llm_error": llm_out.get("error", "")},
+        }
+        receipt = receipts_mod.create_receipt(evt)
+        stages.append(TraceStage(
+            id="receipt", name="Receipt", status="ok", ms=0, ts=now_iso(),
+            input={"event_type": "CHAT_REQUEST"},
+            output={"receipt_id": receipt.event_id, "event_hash": receipt.event_hash,
+                    "previous_event_hash": receipt.previous_event_hash},
+            explanation="Tamper-evident receipt appended to the hash-linked ledger for this request.",
+        ))
+        auditlog.receipt_created(request_id, req_num, conv, session_num, receipt.event_id,
+                                 "CHAT_REQUEST", receipt.decision)
+
+        trace = RequestTrace(
+            request_id=request_id, conversation_id=conv, timestamp=ts, operation="REVEAL",
+            purpose=purpose, destination=destination, prompt=prompt, stages=stages,
+            request_number=req_num, session_number=session_num,
+            summary=_summarize(decision, det, poi, receipt, egr, None, blocked=blocked),
+        )
+        mem_stages = [s for s in stages if s.id not in ("llm", "response")]
+        trace.memverse_ms = round(sum(s.ms for s in mem_stages), 2)
+        trace.model_ms = round(llm_out.get("latency_ms", 0), 2)
+        trace.total_ms = round(trace.memverse_ms + trace.model_ms, 2)
+        _persist_trace(trace)
+
+        # persist messages
+        msg_id = new_id("msg")
+        execute(
+            """INSERT INTO messages (id, conversation_id, role, content, ts, trace_id, receipt_id, provider)
+               VALUES (?,?,?,?,?,?,?,?)""",
+            (new_id("msg"), conv, "user", prompt, now_iso(), trace.request_id, receipt.event_id, "user"),
+        )
+        execute(
+            """INSERT INTO messages (id, conversation_id, role, content, ts, trace_id, receipt_id, provider)
+               VALUES (?,?,?,?,?,?,?,?)""",
+            (msg_id, conv, "assistant", llm_out.get("text", ""), now_iso(),
+             trace.request_id, receipt.event_id, llm_out.get("provider", "")),
+        )
+        result = ChatResult(
+            message_id=msg_id, conversation_id=conv,
+            response_text=llm_out.get("text", ""),
+            provider=llm_out.get("provider", ""), model=llm_out.get("model", ""),
+            demo=bool(llm_out.get("demo")), trace=trace, receipt=receipt,
+            model_input={"messages": messages} if not blocked else {},
+            model_output=llm_out.get("text", "") if not blocked else "",
+            blocked=blocked,
+        )
+        yield {"type": "done", "result": result.model_dump()}
 
     # --------------------------------------------------------- read pipeline
     def process_memory_read(
@@ -930,15 +1365,24 @@ def _sanitize_prompt(prompt: str, per_field, entities) -> str:
     out = prompt
     mapping = {}
     for fd in per_field:
-        if fd.action != "ALLOW" and fd.raw_value and fd.raw_value not in ("", " "):
-            mapping[fd.raw_value] = fd.output or "[redacted]"
+        if fd.action != "ALLOW" and fd.raw_value and fd.raw_value.strip():
+            mapping[fd.raw_value.strip()] = fd.output or "[redacted]"
     for e in entities:
         for fd in per_field:
-            if fd.field == e.entity and fd.action != "ALLOW" and e.value:
-                mapping[e.value] = fd.output or "[redacted]"
-    for raw in sorted(mapping, key=len, reverse=True):
-        if raw and raw in out:
-            out = out.replace(raw, mapping[raw])
+            if (fd.field == e.entity or fd.type == e.type) and fd.action != "ALLOW" and e.value and e.value.strip():
+                if e.value.strip() not in mapping:
+                    mapping[e.value.strip()] = fd.output or "[redacted]"
+
+    # Single pass replacement prioritized by longest match first
+    for raw in sorted(mapping.keys(), key=len, reverse=True):
+        if not raw:
+            continue
+        # Case-insensitive replacement of the exact detected raw value
+        pattern = re.compile(re.escape(raw), re.IGNORECASE)
+        replacement = mapping[raw]
+        # Avoid double-replacements if target already replaced
+        if pattern.search(out):
+            out = pattern.sub(replacement, out)
     return out
 
 

@@ -1,4 +1,4 @@
-// App shell — sidebar navigation + pages
+// App shell — Minimalist & Brutalist Zero-Trust Security Console
 import React, { useEffect, useState } from 'react'
 import { api } from './api'
 import ChatView from './ChatView'
@@ -13,15 +13,15 @@ import ClaimsCoverage from './ClaimsCoverage'
 import { ShieldIcon } from './ui'
 
 const NAV = [
-  { id: 'chat', label: 'Chat', icon: '', group: 'Product' },
-  { id: 'demo', label: 'Guided Demo', icon: '', group: 'Product' },
-  { id: 'registry', label: 'Memory Registry', icon: '', group: 'Security' },
-  { id: 'policy', label: 'Policy Explorer', icon: '', group: 'Security' },
-  { id: 'lab', label: 'Security Lab', icon: '', group: 'Security' },
-  { id: 'ledger', label: 'Event Ledger', icon: '', group: 'Evidence' },
-  { id: 'claims', label: 'Claim Coverage', icon: '', group: 'Evidence' },
-  { id: 'playground', label: 'Memory Playground', icon: '', group: 'Evidence' },
-  { id: 'architecture', label: 'How MEMVERSE Works', icon: '', group: 'Evidence' },
+  { id: 'chat', label: 'Chat Assistant', code: '01', group: 'Interface' },
+  { id: 'demo', label: 'Guided Demo', code: '02', group: 'Interface' },
+  { id: 'registry', label: 'Memory Registry', code: '03', group: 'Security Engine' },
+  { id: 'policy', label: 'Policy Explorer', code: '04', group: 'Security Engine' },
+  { id: 'lab', label: 'Security Lab', code: '05', group: 'Security Engine' },
+  { id: 'ledger', label: 'Event Ledger', code: '06', group: 'Audit & Proof' },
+  { id: 'claims', label: 'Claim Coverage', code: '07', group: 'Audit & Proof' },
+  { id: 'playground', label: 'Memory Playground', code: '08', group: 'Audit & Proof' },
+  { id: 'architecture', label: 'How MEMVERSE Works', code: '09', group: 'Audit & Proof' },
 ]
 
 export default function App() {
@@ -67,25 +67,35 @@ export default function App() {
           <div className="brand-mark">M</div>
           <div>
             <div className="brand-name">MEMVERSE</div>
-            <div className="brand-sub">Zero-Trust Memory for AI</div>
+            <div className="brand-sub">Zero-Trust Firewall</div>
           </div>
         </div>
+
         <nav className="nav" aria-label="Main navigation">
           {groups.map(g => (
             <React.Fragment key={g}>
               <div className="nav-label">{g}</div>
               {NAV.filter(n => n.group === g).map(n => (
-                <button key={n.id} className={`nav-item ${page === n.id ? 'active' : ''}`}
-                  onClick={() => setPage(n.id)} aria-current={page === n.id ? 'page' : undefined}>
-                  <span aria-hidden="true">{n.icon}</span> {n.label}
+                <button
+                  key={n.id}
+                  className={`nav-item ${page === n.id ? 'active' : ''}`}
+                  onClick={() => setPage(n.id)}
+                  aria-current={page === n.id ? 'page' : undefined}
+                >
+                  <span className="mono" style={{ fontSize: 10, opacity: page === n.id ? 1 : 0.6 }}>{n.code}</span>
+                  <span>{n.label}</span>
                 </button>
               ))}
             </React.Fragment>
           ))}
         </nav>
+
         <div className="sidebar-footer">
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11.5, color: 'var(--muted)' }}>
-            <ShieldIcon /> {status ? (status.llm || 'gateway') : 'connecting…'}
+          <div className="telemetry-row">
+            <ShieldIcon size={14} />
+            <span style={{ textTransform: 'uppercase' }}>
+              {status ? (status.llm || 'GATEWAY ACTIVE') : 'CONNECTING…'}
+            </span>
           </div>
           <button className="btn btn-sm" onClick={loadDemo}>⬇ Load Demo Data</button>
           <button className="btn btn-sm" onClick={reset}>⟲ Reset Demo</button>
@@ -94,8 +104,12 @@ export default function App() {
 
       <main className="main">
         {page === 'chat' && (
-          <ChatView conversationId={conversationId} setConversationId={setConversationId}
-            onMessagesChanged={msgs => setMsgCount(msgs.length)} isDemo={status ? status.demo : true} />
+          <ChatView
+            conversationId={conversationId}
+            setConversationId={setConversationId}
+            onMessagesChanged={msgs => setMsgCount(msgs.length)}
+            isDemo={status ? status.demo : true}
+          />
         )}
         {page === 'demo' && <GuidedDemo goChat={() => setPage('chat')} />}
         {page === 'registry' && <Registry />}
