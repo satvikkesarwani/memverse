@@ -115,59 +115,189 @@ Every prompt, document attachment, and memory operation passes through a **12-st
 
 ---
 
-## Architectural Principles
+## System Architecture
+
+### High-Level Architectural Flow
 
 ```mermaid
 flowchart TD
-    classDef client fill:#f8fafc,stroke:#64748b,stroke-width:1.5px
-    classDef gateway fill:#0f172a,color:#fff,stroke:#0d9488,stroke-width:2px
-    classDef stage fill:#f0fdfa,stroke:#0d9488,stroke-width:1.5px
-    classDef untrusted fill:#fef2f2,stroke:#b91c1c,stroke-width:2px,stroke-dasharray: 4 4
-    classDef secure fill:#ecfdf5,stroke:#059669,stroke-width:2px
-
-    User[User / Client Application] -->|HTTP / SSE Stream| API[FastAPI Gateway Engine]
+    User["User / Application"] -->|Chat Prompt or Document| API["FastAPI Gateway (/api/chat)"]
     
-    subgraph Boundary["MEMVERSE Zero-Trust Perimeter"]
-        API --> CoreGateway[Memverse Gateway Core]
+    subgraph TrustedZone["TRUSTED ZONE: MEMVERSE Gateway Choke Point"]
+        direction TB
+        API --> GatewayCore["Gateway Orchestrator"]
         
-        subgraph Pipeline["12-Stage Sequential Pipeline"]
-            S1[01 REQUEST: Context Validation]
-            S2[02 DETECT: Entity & PII Extraction]
-            S3[03 DEFEND: Adversarial Poisoning Analysis]
-            S4[04 RETRIEVE: Passport & Memory Store]
-            S5[05 POLICY: Deterministic Matrix v1.4]
-            S6[06 TRANSFORM: Semantic Field Sanitization]
-            S7[07 PASSPORT: TTL & Revocation Validation]
-            S8[08 CONTEXT: Approved Assembly]
-            S9[09 EGRESS: Prohibited Field Validator]
+        subgraph Pipeline["12-Stage Deterministic Security Pipeline"]
+            direction TB
+            S1["01 REQUEST: Ingestion & Metadata Validation"]
+            S2["02 DETECT: Entity & PII Scanner"]
+            S3["03 DEFEND: Adversarial Poisoning Analyzer"]
+            S4["04 RETRIEVE: Passport & Memory Store"]
+            S5["05 POLICY: Deterministic Rule Matrix v1.4"]
+            S6["06 TRANSFORM: Semantic Field Sanitizer"]
+            S7["07 PASSPORT: TTL & Revocation Evaluator"]
+            S8["08 CONTEXT: Approved Context Assembler"]
+            S9["09 EGRESS: Outbound Prohibited Field Guard"]
             
             S1 --> S2 --> S3 --> S4 --> S5 --> S6 --> S7 --> S8 --> S9
         end
         
-        CoreGateway --> Pipeline
+        GatewayCore --> Pipeline
         
-        S10[10 RECEIPT: SHA-256 Ledger Append]
-        S11[11 VAULT: Persona Scaffolding Sync]
+        S10["10 RECEIPT: SHA-256 Ledger Append"]
+        S11["11 VAULT: Persona Scaffolding Sync"]
         
         Pipeline --> S10
         Pipeline --> S11
     end
-
-    S9 -->|Sanitized Payload Only| NIM[NVIDIA NIM / LLM Consumer]
-    NIM -.->|Raw Response Stream| CoreGateway
     
-    class User client
-    S1,S2,S3,S4,S5,S6,S7,S8,S9,S10,S11 stage
-    NIM untrusted
-    Boundary secure
+    subgraph UntrustedZone["UNTRUSTED ZONE: Downstream Consumer"]
+        LLM["NVIDIA NIM / Foundation Model"]
+    end
+    
+    DB[("SQLite Store (Fernet Encrypted)")]
+    
+    S9 -->|Sanitized Payload Only| LLM
+    LLM -.->|Inference Output Stream| GatewayCore
+    S10 --> DB
+    S4 <--> DB
 ```
 
-### Core Invariants
+### Component Breakdown
 
-1. **Deterministic Single Choke Point**: No route, memory read, or model call can bypass `gateway.py`.
-2. **Fail-Closed by Default**: If a passport is revoked, expired, or policy resolution fails, access is rejected immediately (`decision: BLOCK`).
-3. **Decoupled Identity & Reasoning**: The downstream model receives only generalized domain semantics (e.g., `"Western India Region"`, `"ID-****5166"`), preventing persistent profiling.
-4. **Verifiable Audit Ledger**: Every transaction produces a hash-linked receipt linked to previous transactions via SHA-256.
+| Component | Module | Responsibility |
+|:---|:---|:---|
+| **FastAPI Routes** | `backend/app/api.py` | Dedicated entry point for frontend requests with zero bypass |
+| **Gateway Core** | `backend/app/gateway.py` | Single choke point executing the 12-stage security lifecycle |
+| **Sensitive Detector** | `backend/app/detector.py` | Multi-category regex and context lexicon entity extraction |
+| **Persona Vault** | `backend/app/persona.py` | Global Persona Vault auto-harvester and relevance scaffolding |
+| **Poisoning Defense** | `backend/app/poisoning.py` | Weighted heuristic scoring against prompt injections and overrides |
+| **Policy Engine** | `backend/app/policy.py` | Versioned typed rules v1.4 and sensitivity-operation matrix |
+| **Transformer** | `backend/app/transformer.py` | Deterministic `SUPPRESS`, `GENERALIZE`, `REDACT`, `TOKENIZE`, `ALLOW` |
+| **Egress Guard** | `backend/app/egress.py` | Final byte-level check preventing prohibited values from crossing wire |
+| **Cryptographic Receipts** | `backend/app/receipts.py` | SHA-256 hash-linked ledger generation and real-time verification |
+| **Encrypted Storage** | `backend/app/crypto.py` / `db.py` | SQLite persistence with Fernet symmetric authenticated encryption |
+
+---
+
+## User Workflow
+
+```mermaid
+journey
+    title User Interaction & Security Audit Journey
+    section Interactive Chat
+      Launch Web Application: 5: User
+      Upload Document or Resume: 5: User
+      Submit Query ("Summarize my background"): 5: User
+    section Gateway Inspection
+      Click Inspect MEMVERSE: 5: User
+      Review 12-Stage Pipeline Latencies: 5: User
+      Inspect Raw Input vs Sanitized Payload Lens: 5: User
+      Verify SHA-256 Hash Chain Integrity: 5: User
+    section Memory & Policy Governance
+      Inspect Global Persona Vault Attributes: 5: User
+      Revoke Stored Memory Passport: 5: User
+      Re-query Revoked Memory (Fail-Closed Denied): 5: User
+    section Adversarial Validation
+      Run Security Lab (8/8 Attack Suites): 5: User
+      Inspect Immutable Cryptographic Receipts: 5: User
+```
+
+---
+
+## Data & Request Lifecycles
+
+### Complete Request Lifecycle
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Client as User / Application
+    participant GW as MEMVERSE Gateway
+    participant Policy as Policy Engine (v1.4)
+    participant Store as Encrypted Memory DB
+    participant LLM as NVIDIA NIM (Untrusted)
+
+    Client->>GW: POST /api/chat/stream {prompt, document, purpose}
+    
+    rect rgb(240, 253, 250)
+        Note over GW: 12-Stage Deterministic Pipeline Execution
+        GW->>GW: 01 REQUEST: Validate purpose and destination
+        GW->>GW: 02 DETECT: Scan PII (Names, Phone, Email, Handles)
+        GW->>GW: 03 DEFEND: Score injection and override risk
+        GW->>Store: 04 RETRIEVE: Fetch candidate memories & passports
+        Store-->>GW: Encrypted records + passport metadata
+        GW->>GW: 05 PASSPORT: Check TTL and revocation state (Fail-Closed)
+        GW->>Policy: 06 POLICY: Evaluate field-level actions
+        Policy-->>GW: Field decisions (SUPPRESS, GENERALIZE, REDACT)
+        GW->>GW: 07 TRANSFORM: Execute field sanitization
+        GW->>GW: 08 CONTEXT: Assemble sanitized prompt + background
+        GW->>GW: 09 EGRESS: Validate zero raw PII remains
+    end
+    
+    GW->>LLM: 10 LLM: Dispatch sanitized payload
+    Note over LLM: Model sees zero raw PII or exact identifiers
+    LLM-->>GW: Stream tokens via SSE
+    
+    rect rgb(240, 253, 250)
+        GW->>GW: 11 RESPONSE: Stream tokens to client
+        GW->>Store: 12 RECEIPT: Append SHA-256 block to ledger
+    end
+    
+    GW-->>Client: Complete response + Receipt ID + Trace ID
+```
+
+### Memory Passport Lifecycle
+
+```mermaid
+stateDiagram-v2
+    [*] --> MemoryWritten: User declares memory or writes via Playground
+    
+    state MemoryWritten {
+        [*] --> DetectionScan
+        DetectionScan --> PoisoningAnalysis
+        PoisoningAnalysis --> PolicyEvaluation
+        PolicyEvaluation --> FernetEncryption
+        FernetEncryption --> IssuePassport
+    }
+    
+    IssuePassport --> ACTIVE: Consent granted and TTL valid
+    
+    state ACTIVE {
+        [*] --> ReadRequest
+        ReadRequest --> ValidatePassport
+        ValidatePassport --> ELIGIBLE: Passport valid
+        ELIGIBLE --> TransformSemantic: Apply field transforms
+        TransformSemantic --> ApprovedContext: Model-safe context
+    }
+    
+    ACTIVE --> REVOKED: User clicks Revoke in Registry
+    ACTIVE --> EXPIRED: TTL threshold exceeded
+    ACTIVE --> QUARANTINED: Memory poisoning pattern detected
+    
+    REVOKED --> FAIL_CLOSED: Access blocked immediately
+    EXPIRED --> FAIL_CLOSED: Access blocked immediately
+    QUARANTINED --> NEVER_RETRIEVED: Excluded from all inference
+```
+
+---
+
+## 12-Stage Pipeline Specification
+
+| Index | Stage Name | Description | Output Guarantee |
+|:---|:---|:---|:---|
+| **01** | `REQUEST` | Ingests prompt, conversation ID, and destination metadata | Structured validation; drops malformed inputs |
+| **02** | `DETECT` | Multi-category regex and contextual entity extraction | Structured entity list tagged by sensitivity tier |
+| **03** | `DEFEND` | Analyzes prompt against adversarial attack patterns | Quantified risk score (`ALLOW`, `WARN`, `BLOCK`) |
+| **04** | `RETRIEVE` | Identifies candidate memories from encrypted storage | Gathers candidate memory IDs and passports |
+| **05** | `PASSPORT` | Validates consent status, expiration date, and revocation flag | Filters out revoked or expired records |
+| **06** | `POLICY` | Evaluates deterministic v1.4 rule matrix | Emits field-level actions (`ALLOW`, `REDACT`, etc.) |
+| **07** | `TRANSFORM` | Executes redaction, generalization, and masking | Generates sanitized text representations |
+| **08** | `CONTEXT` | Synthesizes approved background context and prompt | Assembles clean system and user prompt blocks |
+| **09** | `EGRESS` | Final verification pass over outbound wire message | Blocks request if prohibited data patterns remain |
+| **10** | `LLM` | Dispatches sanitized payload to NVIDIA NIM API | Encrypted server-side API call; streams tokens |
+| **11** | `RESPONSE` | Formats output stream and logs response metadata | Captures model latency and token metrics |
+| **12** | `RECEIPT` | Computes SHA-256 block hash and appends to ledger | Tamper-evident proof emitted to audit store |
 
 ---
 
@@ -192,25 +322,6 @@ flowchart TD
 ### 4. Cryptographic Receipts & Ledger
 - **SHA-256 Hash Chain**: Each request generates an immutable event record containing input hash, output hash, policy version, and previous block hash.
 - **Mathematical Integrity Verification**: The `/api/receipts/{id}/verify` endpoint recomputes state from raw cryptographic parameters to prove zero tampering.
-
----
-
-## 12-Stage Pipeline Specification
-
-| Index | Stage Name | Description | Output Guarantee |
-|:---|:---|:---|:---|
-| **01** | `REQUEST` | Ingests prompt, conversation ID, and destination metadata | Structured validation; drops malformed inputs |
-| **02** | `DETECT` | Multi-category regex and contextual entity extraction | Structured entity list tagged by sensitivity tier |
-| **03** | `DEFEND` | Analyzes prompt against adversarial attack patterns | Quantified risk score (`ALLOW`, `WARN`, `BLOCK`) |
-| **04** | `RETRIEVE` | Identifies candidate memories from encrypted storage | Gathers candidate memory IDs and passports |
-| **05** | `PASSPORT` | Validates consent status, expiration date, and revocation flag | Filters out revoked or expired records |
-| **06** | `POLICY` | Evaluates deterministic v1.4 rule matrix | Emits field-level actions (`ALLOW`, `REDACT`, etc.) |
-| **07** | `TRANSFORM` | Executes redaction, generalization, and masking | Generates sanitized text representations |
-| **08** | `CONTEXT` | Synthesizes approved background context and prompt | Assembles clean system and user prompt blocks |
-| **09** | `EGRESS` | Final verification pass over outbound wire message | Blocks request if prohibited data patterns remain |
-| **10** | `LLM` | Dispatches sanitized payload to NVIDIA NIM API | Encrypted server-side API call; streams tokens |
-| **11** | `RESPONSE` | Formats output stream and logs response metadata | Captures model latency and token metrics |
-| **12** | `RECEIPT` | Computes SHA-256 block hash and appends to ledger | Tamper-evident proof emitted to audit store |
 
 ---
 
