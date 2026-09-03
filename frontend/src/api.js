@@ -125,6 +125,55 @@ export const api = {
     }
     return finalResult
   },
+  chatImageStream: async (formData, onDelta) => {
+    const res = await fetch('/api/chat/image/stream', { method: 'POST', body: formData })
+    if (!res.ok) {
+      let detail = res.statusText
+      try {
+        const b = await res.json()
+        detail = b.detail || JSON.stringify(b)
+      } catch { /* ignore */ }
+      throw new Error(`${res.status}: ${detail}`)
+    }
+    const reader = res.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
+    let finalResult = null
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split('\n')
+      buffer = lines.pop() || ''
+      for (const line of lines) {
+        const trimmed = line.trim()
+        if (!trimmed.startsWith('data:')) continue
+        try {
+          const payload = JSON.parse(trimmed.slice(5).trim())
+          if (payload.type === 'delta' && payload.text) {
+            onDelta(payload.text)
+          } else if (payload.type === 'done' && payload.result) {
+            finalResult = payload.result
+          }
+        } catch (e) {
+          console.error('SSE parse error:', e)
+        }
+      }
+    }
+    return finalResult
+  },
+  chatImage: async (formData) => {
+    const res = await fetch('/api/chat/image', { method: 'POST', body: formData })
+    if (!res.ok) {
+      let detail = res.statusText
+      try {
+        const b = await res.json()
+        detail = b.detail || JSON.stringify(b)
+      } catch { /* ignore */ }
+      throw new Error(`${res.status}: ${detail}`)
+    }
+    return res.json()
+  },
   securityTest: (name) => jfetch('/api/security/test', { method: 'POST', body: JSON.stringify({ name }) }),
   securityRunAll: () => jfetch('/api/security/run-all', { method: 'POST' }),
   persona: () => jfetch('/api/persona'),

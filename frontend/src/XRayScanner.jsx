@@ -131,45 +131,100 @@ export default function XRayScanner({ trace, modelInput, requestId, receipt, doc
             <span className="slider-pct-badge">{sliderPos}% Cleaned View</span>
           </div>
 
-          <div
-            className="xray-split-canvas"
-            ref={containerRef}
-            onMouseDown={handleMouseDown}
-            onTouchStart={handleMouseDown}
-          >
-            {/* Left Layer: Raw Human Text */}
-            <div className="split-layer layer-human" style={{ width: '100%' }}>
-              <div className="split-badge-tag human">WHAT YOU SENT · CONTAINS PRIVATE DATA</div>
-              <div className="split-content-text mono">
-                {rawPrompt}
-              </div>
-            </div>
-
-            {/* Right Layer: Sanitized Wire Egress (Clipped by sliderPos) */}
+          {/* If Image Request, render Image Split Comparison */}
+          {docMeta?.rawPreview || docMeta?.sanitizedPreview ? (
             <div
-              className="split-layer layer-wire"
-              style={{
-                clipPath: `polygon(${sliderPos}% 0, 100% 0, 100% 100%, ${sliderPos}% 100%)`,
-                WebkitClipPath: `polygon(${sliderPos}% 0, 100% 0, 100% 100%, ${sliderPos}% 100%)`,
-              }}
+              className="xray-split-canvas"
+              ref={containerRef}
+              onMouseDown={handleMouseDown}
+              onTouchStart={handleMouseDown}
+              style={{ minHeight: '260px', height: '300px', position: 'relative', overflow: 'hidden' }}
             >
-              <div className="split-badge-tag wire">WHAT AI RECEIVED · 100% PRIVACY PROTECTED</div>
-              <div className="split-content-text mono">
-                {wireContext}
+              {/* Left Layer: Raw Human Upload */}
+              <div className="split-layer layer-human" style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#0a0a0c' }}>
+                <div className="split-badge-tag human">RAW CLIENT UPLOAD · CONTAINS REAL BIOMETRIC FACE</div>
+                <img
+                  src={docMeta.rawPreview}
+                  alt="Raw Photo"
+                  style={{ maxHeight: '200px', maxWidth: '80%', objectFit: 'contain', borderRadius: '6px', marginTop: '10px' }}
+                />
               </div>
-            </div>
 
-            {/* Interactive Laser Divider Handle */}
-            <div
-              className="laser-divider"
-              style={{ left: `${sliderPos}%` }}
-            >
-              <div className="laser-line" />
-              <div className="laser-handle">
-                <span className="laser-arrows">◀ ▶</span>
+              {/* Right Layer: Sanitized Wire Egress (Clipped by sliderPos) */}
+              <div
+                className="split-layer layer-wire"
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  background: '#051109',
+                  clipPath: `polygon(${sliderPos}% 0, 100% 0, 100% 100%, ${sliderPos}% 100%)`,
+                  WebkitClipPath: `polygon(${sliderPos}% 0, 100% 0, 100% 100%, ${sliderPos}% 100%)`,
+                }}
+              >
+                <div className="split-badge-tag wire">WHAT NVIDIA AI RECEIVED · 8x8 MOSAIC PIXELATED + EXIF STRIPPED</div>
+                <img
+                  src={docMeta.sanitizedPreview || docMeta.rawPreview}
+                  alt="Sanitized Egress Photo"
+                  style={{ maxHeight: '200px', maxWidth: '80%', objectFit: 'contain', borderRadius: '6px', marginTop: '10px', border: '2px solid var(--green)' }}
+                />
+              </div>
+
+              {/* Interactive Laser Divider Handle */}
+              <div
+                className="laser-divider"
+                style={{ left: `${sliderPos}%` }}
+              >
+                <div className="laser-line" />
+                <div className="laser-handle">
+                  <span className="laser-arrows">◀ ▶</span>
+                </div>
               </div>
             </div>
-          </div>
+          ) : (
+            <div
+              className="xray-split-canvas"
+              ref={containerRef}
+              onMouseDown={handleMouseDown}
+              onTouchStart={handleMouseDown}
+            >
+              {/* Left Layer: Raw Human Text */}
+              <div className="split-layer layer-human" style={{ width: '100%' }}>
+                <div className="split-badge-tag human">WHAT YOU SENT · CONTAINS PRIVATE DATA</div>
+                <div className="split-content-text mono">
+                  {rawPrompt}
+                </div>
+              </div>
+
+              {/* Right Layer: Sanitized Wire Egress (Clipped by sliderPos) */}
+              <div
+                className="split-layer layer-wire"
+                style={{
+                  clipPath: `polygon(${sliderPos}% 0, 100% 0, 100% 100%, ${sliderPos}% 100%)`,
+                  WebkitClipPath: `polygon(${sliderPos}% 0, 100% 0, 100% 100%, ${sliderPos}% 100%)`,
+                }}
+              >
+                <div className="split-badge-tag wire">WHAT AI RECEIVED · 100% PRIVACY PROTECTED</div>
+                <div className="split-content-text mono">
+                  {wireContext}
+                </div>
+              </div>
+
+              {/* Interactive Laser Divider Handle */}
+              <div
+                className="laser-divider"
+                style={{ left: `${sliderPos}%` }}
+              >
+                <div className="laser-line" />
+                <div className="laser-handle">
+                  <span className="laser-arrows">◀ ▶</span>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

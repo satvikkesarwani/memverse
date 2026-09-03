@@ -115,6 +115,19 @@ CREATE TABLE IF NOT EXISTS policies (
     data_json TEXT,
     created_at TEXT
 );
+CREATE TABLE IF NOT EXISTS persona_attributes (
+    id TEXT PRIMARY KEY,
+    user_id TEXT DEFAULT 'default_user',
+    category TEXT,
+    key TEXT,
+    label TEXT,
+    raw_value TEXT,
+    sanitized_value TEXT,
+    sensitivity TEXT,
+    policy_action TEXT,
+    source_snippet TEXT,
+    updated_at TEXT
+);
 """
 
 

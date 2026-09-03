@@ -4,6 +4,8 @@ import { api, fmtTime, shortId } from './api'
 import TraceDrawer from './TraceDrawer'
 import XRayScanner from './XRayScanner'
 import PersonaVaultDropdown from './PersonaVaultDropdown'
+import BiometricConsentGate from './BiometricConsentGate'
+import { scanImageFile, redactFaceFromImage } from './imageScanner'
 import { Badge, ShieldIcon } from './ui'
 
 marked.setOptions({
@@ -131,6 +133,11 @@ export default function ChatView({ conversationId, setConversationId, onMessages
   const [input, setInput] = useState('')
   const [attachedFile, setAttachedFile] = useState(null)
   const [attachedSampleId, setAttachedSampleId] = useState(null)
+  const [attachedImage, setAttachedImage] = useState(null)
+  const [imageScanResult, setImageScanResult] = useState(null)
+  const [imageConsentGranted, setImageConsentGranted] = useState(false)
+  const [showConsentGate, setShowConsentGate] = useState(false)
+  const [imageScanning, setImageScanning] = useState(false)
   const [busy, setBusy] = useState(false)
   const [stageIdx, setStageIdx] = useState(0)
   const [trace, setTrace] = useState(null)
@@ -145,9 +152,19 @@ export default function ChatView({ conversationId, setConversationId, onMessages
   const scrollRef = useRef(null)
   const textareaRef = useRef(null)
   const fileInputRef = useRef(null)
+  const imageInputRef = useRef(null)
   const convRef = useRef(conversationId)
 
   useEffect(() => { convRef.current = conversationId }, [conversationId])
+
+useEffect(() => {
+  if (showConsentGate && imageScanResult && !imageConsentGranted) {
+    // Ensure textarea is disabled while consent gate is open
+    const tex = textareaRef.current
+    if (tex) tex.disabled = true
+    return () => { if (tex) tex.disabled = false }
+  }
+}, [showConsentGate, imageConsentGranted])
 
   const loadMessages = async () => {
     if (!convRef.current) {
@@ -231,10 +248,48 @@ export default function ChatView({ conversationId, setConversationId, onMessages
   const handleFileSelect = (e) => {
     const file = e.target.files?.[0]
     if (file) {
-      setAttachedFile(file)
-      setAttachedSampleId(null)
+      const isImage = file.type && file.type.startsWith('image/')
+      const isPDF = file.type === 'application/pdf' || file.name.endsWith('.pdf')
+      if (isImage) {
+        setAttachedImage(file)
+        setAttachedSampleId(null)
+        setAttachedFile(null)
+      } else if (isPDF) {
+        setAttachedFile(file)
+        setAttachedImage(null)
+        setAttachedSampleId(null)
+      }
     }
   }
+
+  const handleImageSelect = async (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    setImageScanning(true)
+    setAttachedImage(file)
+    setAttachedSampleId(null)
+    setAttachedFile(null)
+    setFailedText('')
+
+    const result = await scanImageFile(file)
+    setImageScanResult(result)
+    setImageScanning(false)
+
+    if (result.hasFace) {
+      // Biometric Face detected -> Show explicit Biometric Consent Gate
+      setShowConsentGate(true)
+      setImageConsentGranted(false)
+    } else {
+      // Normal Screenshot / Document / Diagram -> Auto allow without annoying popup
+      setShowConsentGate(false)
+      setImageConsentGranted(true)
+    }
+  }
+
+  const [imageRedacted, setImageRedacted] = useState(true)
+  const [imageRawPreview, setImageRawPreview] = useState('')
+  const [imageSanitizedPreview, setImageSanitizedPreview] = useState('')
 
   const handleMedicalSampleSelect = (sampleId) => {
     setAttachedSampleId(sampleId)
@@ -245,25 +300,39 @@ export default function ChatView({ conversationId, setConversationId, onMessages
   const removeAttachment = () => {
     setAttachedFile(null)
     setAttachedSampleId(null)
+    setAttachedImage(null)
+    setImageScanResult(null)
+    setImageConsentGranted(false)
+    setImageRawPreview('')
+    setImageSanitizedPreview('')
     if (fileInputRef.current) fileInputRef.current.value = ''
+    if (imageInputRef.current) imageInputRef.current.value = ''
   }
 
   const send = async (textToSend, overrideSampleId) => {
     const p = (textToSend !== undefined && textToSend !== '' ? textToSend : input).trim()
     const activeSample = overrideSampleId || attachedSampleId
     const activeFile = attachedFile
+    const activeImage = attachedImage
 
-    if (!p && !activeFile && !activeSample) return
+    if (!p && !activeFile && !activeImage && !activeSample) return
     if (busy) return
 
     setFailedText('')
     setInput('')
     setAttachedFile(null)
     setAttachedSampleId(null)
+    setAttachedImage(null)
     if (fileInputRef.current) fileInputRef.current.value = ''
+    if (imageInputRef.current) imageInputRef.current.value = ''
 
-    let userPromptText = p || 'Please analyze and summarize this attached document, highlight key takeaways, and provide helpful insights while keeping personal details confidential.'
+    let userPromptText = p || (activeImage ? 'Analyze this image and describe what you observe.' : 'Please analyze and summarize this attached document, highlight key takeaways, and provide helpful insights while keeping personal details confidential.')
     let docAttachment = null
+    let imageAttachment = null
+    let consentGranted = false
+    let faceDetected = false
+    let isRedacted = imageRedacted
+
     if (activeFile) {
       docAttachment = { name: activeFile.name, type: 'FILE' }
     } else if (activeSample) {
@@ -271,12 +340,28 @@ export default function ChatView({ conversationId, setConversationId, onMessages
       docAttachment = { name: s ? s.label : activeSample, type: 'SAMPLE' }
     }
 
+    if (activeImage && imageConsentGranted) {
+      faceDetected = imageScanResult?.hasFace || false
+      consentGranted = true
+      imageAttachment = {
+        name: activeImage.name,
+        rawPreview: imageRawPreview || imageScanResult?.thumbnailDataUrl,
+        sanitizedPreview: imageSanitizedPreview || imageScanResult?.sanitizedThumbnail,
+        faceDetected,
+        isRedacted,
+      }
+    }
+
     const userMsg = {
       role: 'user',
       content: userPromptText,
       docAttachment: docAttachment,
+      imageAttachment: imageAttachment,
       ts: new Date().toISOString(),
       hasDoc: Boolean(activeFile || activeSample),
+      consentGranted,
+      faceDetected,
+      isRedacted,
     }
     const placeholderAssistant = {
       role: 'assistant',
@@ -299,7 +384,20 @@ export default function ChatView({ conversationId, setConversationId, onMessages
         })
       }
 
-      if (activeFile || activeSample) {
+      if (activeImage && imageConsentGranted) {
+        // Build FormData for image chat
+        const formData = new FormData()
+        formData.append('image', activeImage)
+        formData.append('prompt', userPromptText)
+        if (convRef.current) formData.append('conversation_id', convRef.current)
+        formData.append('purpose', 'image_generation')
+        formData.append('destination', 'nvidia')
+        formData.append('consent_granted', 'true')
+        formData.append('face_detected', faceDetected ? 'true' : 'false')
+        formData.append('face_redacted', isRedacted ? 'true' : 'false')
+
+        resp = await api.chatImage(formData)
+      } else if (activeFile || activeSample) {
         const formData = new FormData()
         if (activeFile) formData.append('file', activeFile)
         if (activeSample) formData.append('sample_id', activeSample)
@@ -326,6 +424,7 @@ export default function ChatView({ conversationId, setConversationId, onMessages
         model_input: resp?.model_input,
         blocked: resp?.blocked,
         docMeta: resp?.document,
+        imageMeta: imageAttachment,
         isStreaming: false,
       }
       setMessages(prev => {
@@ -358,7 +457,6 @@ export default function ChatView({ conversationId, setConversationId, onMessages
       send()
     }
   }
-
   const onDragOver = (e) => {
     e.preventDefault()
     setDragOver(true)
@@ -474,6 +572,47 @@ export default function ChatView({ conversationId, setConversationId, onMessages
                             </div>
                           </div>
                         )}
+                        {m.imageAttachment && (
+                          <div style={{
+                            marginBottom: '10px',
+                            background: 'var(--surface-alt)',
+                            border: `1.5px solid ${m.imageAttachment.isRedacted ? 'var(--green)' : 'var(--border)'}`,
+                            borderRadius: 'var(--radius-sm)',
+                            overflow: 'hidden',
+                          }}>
+                            <div style={{ position: 'relative', background: '#000', textAlign: 'center' }}>
+                              <img
+                                src={m.imageAttachment.rawPreview || m.imageAttachment.sanitizedPreview}
+                                alt="Uploaded Photo"
+                                style={{
+                                  maxHeight: '180px',
+                                  maxWidth: '100%',
+                                  objectFit: 'contain',
+                                  display: 'block',
+                                  margin: '0 auto',
+                                }}
+                              />
+                              <div style={{
+                                position: 'absolute',
+                                bottom: '6px',
+                                left: '8px',
+                                background: m.imageAttachment.isRedacted ? 'rgba(21, 128, 61, 0.9)' : 'rgba(0, 0, 0, 0.75)',
+                                color: '#fff',
+                                padding: '2px 8px',
+                                borderRadius: '4px',
+                                fontSize: '10px',
+                                fontWeight: 700,
+                                fontFamily: 'var(--font-mono)',
+                              }}>
+                                {m.imageAttachment.isRedacted ? '🛡️ ZERO-TRUST: FACE BLURRED FOR AI' : '📸 EXIF STRIPPED'}
+                              </div>
+                            </div>
+                            <div style={{ padding: '6px 10px', fontSize: '11px', color: 'var(--faint)', display: 'flex', justifyContent: 'space-between' }}>
+                              <span><b>{m.imageAttachment.name}</b></span>
+                              <span>{m.imageAttachment.isRedacted ? '✅ 8x8 Mosaic Redacted' : 'Explicit Consent'}</span>
+                            </div>
+                          </div>
+                        )}
                         {m.role === 'assistant' ? (
                           <MarkdownView content={m.content} />
                         ) : (
@@ -485,6 +624,7 @@ export default function ChatView({ conversationId, setConversationId, onMessages
                         <span>{fmtTime(m.ts)}</span>
                         {m.request_id && <span>· req: {shortId(m.request_id)}</span>}
                         {m.docMeta && <Badge kind="accent">📄 {m.docMeta.filename} ({m.docMeta.char_count} chars)</Badge>}
+                        {m.imageMeta && <Badge kind={m.imageMeta.isRedacted ? "ok" : "accent"}>📸 {m.imageMeta.isRedacted ? "Face Redacted" : "EXIF Stripped"}</Badge>}
                         {m.blocked && <Badge kind="blocked">BLOCKED · NOT SENT</Badge>}
                       </div>
                       {m.role === 'assistant' && !m.isStreaming && (m.trace || m.request_id) && (
@@ -515,7 +655,7 @@ export default function ChatView({ conversationId, setConversationId, onMessages
                           modelInput={m.model_input}
                           requestId={m.request_id}
                           receipt={m.receipt}
-                          docMeta={m.docMeta}
+                          docMeta={m.docMeta || m.imageMeta || messages[i - 1]?.imageAttachment}
                           prompt={m.userPrompt || messages[i - 1]?.content}
                           responseText={m.content}
                         />
@@ -546,14 +686,27 @@ export default function ChatView({ conversationId, setConversationId, onMessages
         {/* Composer with File Attachment */}
         <div className="chat-composer">
           {/* File Attachment Chip */}
-          {(attachedFile || attachedSampleId) && (
+          {(attachedFile || attachedSampleId || attachedImage) && (
             <div style={{
               display: 'inline-flex', alignItems: 'center', gap: 8,
               padding: '4px 10px', marginBottom: 8,
               background: 'var(--accent-bg)', border: '1.5px solid var(--accent)',
               borderRadius: 'var(--radius-sm)', fontSize: 11.5, fontFamily: 'var(--font-mono)'
             }}>
-              <span>📄 {attachedFile ? `${attachedFile.name} (${Math.round(attachedFile.size / 1024)} KB)` : `Preset: ${attachedSampleId}`}</span>
+              <span>📄 {attachedFile ? `${attachedFile.name} (${Math.round(attachedFile.size / 1024)} KB)` : ''}</span>
+              {attachedImage && imageConsentGranted && (
+                <div style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 4,
+                  background: 'var(--green-bg)', border: '1.5px solid var(--green)',
+                  borderRadius: 'var(--radius-sm)', padding: '2px 6px', fontSize: 11, fontFamily: 'var(--font-mono)'
+                }}>
+                  <span>📸 {attachedImage.name} (${Math.round(attachedImage.size / 1024)} KB)</span>
+                  <span style={{ color: 'var(--green)', fontWeight: 600, fontSize: 11 }}>✅ Consent</span>
+                </div>
+              )}
+              {attachedSampleId && (
+                <span>🏥 Preset: {attachedSampleId}</span>
+              )}
               <button
                 style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontWeight: 700, padding: 0 }}
                 onClick={removeAttachment}
@@ -570,6 +723,13 @@ export default function ChatView({ conversationId, setConversationId, onMessages
               ref={fileInputRef}
               onChange={handleFileSelect}
               accept=".pdf,.txt,.md"
+              style={{ display: 'none' }}
+            />
+          <input
+              type="file"
+              ref={imageInputRef}
+              onChange={handleImageSelect}
+              accept=".jpg,.jpeg,.png,.webp"
               style={{ display: 'none' }}
             />
             <textarea
@@ -601,8 +761,17 @@ export default function ChatView({ conversationId, setConversationId, onMessages
               </button>
               <button
                 type="button"
+                className="attach-btn"
+                onClick={() => imageInputRef.current?.click()}
+                title="Attach Image (JPEG, PNG, WebP)"
+                aria-label="Attach Image"
+              >
+                🖼️
+              </button>
+              <button
+                type="button"
                 className="send-btn"
-                disabled={busy || (!input.trim() && !attachedFile && !attachedSampleId)}
+                disabled={busy || (!input.trim() && !attachedFile && !attachedSampleId && !attachedImage)}
                 onClick={() => send()}
                 aria-label="Send"
               >
@@ -619,6 +788,35 @@ export default function ChatView({ conversationId, setConversationId, onMessages
           receipt={traceReceipt}
           modelInput={traceModelInput}
           onClose={() => setTrace(null)}
+        />
+      )}
+      {showConsentGate && imageScanResult && (
+        <BiometricConsentGate
+          scanResult={imageScanResult}
+          filename={attachedImage ? attachedImage.name : 'image.jpg'}
+          purposeHint={input.trim() || ''}
+          onConsent={(isAnonymized) => {
+            setShowConsentGate(false)
+            setImageConsentGranted(true)
+            setImageRedacted(isAnonymized)
+            if (isAnonymized && imageScanResult.sanitizedFile) {
+              setAttachedImage(imageScanResult.sanitizedFile)
+              setImageSanitizedPreview(imageScanResult.sanitizedThumbnail)
+              setImageRawPreview(imageScanResult.thumbnailDataUrl)
+            } else {
+              setImageSanitizedPreview(imageScanResult.thumbnailDataUrl)
+              setImageRawPreview(imageScanResult.thumbnailDataUrl)
+            }
+          }}
+          onCancel={() => {
+            setShowConsentGate(false)
+            setAttachedImage(null)
+            setImageScanResult(null)
+            setImageConsentGranted(false)
+            setImageRawPreview('')
+            setImageSanitizedPreview('')
+            if (imageInputRef.current) imageInputRef.current.value = ''
+          }}
         />
       )}
     </div>

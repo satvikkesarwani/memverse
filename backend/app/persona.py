@@ -108,7 +108,7 @@ def categorize_and_sanitize(entity_type: str, raw_value: str, sensitivity: str =
 
     # 6. Location & Address
     if any(k in etype for k in ["LOCATION", "ADDRESS", "CITY", "STATE"]):
-        city = "Western India Region (e.g. Pune/Mumbai)" if any(k in val_clean.lower() for k in ["pune", "mumbai", "maharashtra"]) else ("Northern India Region" if any(k in val_clean.lower() for k in ["delhi", "noida", "up"]) else "Urban Indian Region")
+        city = "Western India Region" if any(k in val_clean.lower() for k in ["pune", "mumbai", "maharashtra"]) else ("Northern India Region" if any(k in val_clean.lower() for k in ["delhi", "noida", "up"]) else "Urban Indian Region")
         return {
             "category": "LOCATION",
             "key": "location",
@@ -125,16 +125,17 @@ def categorize_and_sanitize(entity_type: str, raw_value: str, sensitivity: str =
             "category": "CONTACT",
             "key": "email",
             "label": "Email Address",
-            "sanitized_value": f"[REDACTED_EMAIL] (Domain: @{domain})",
+            "sanitized_value": f"[REDACTED_EMAIL] (Provider: {domain})",
             "sensitivity": "CRITICAL",
             "policy_action": "MASK"
         }
     if "PHONE" in etype or "MOBILE" in etype:
+        last4 = val_clean[-4:] if len(val_clean) >= 4 else "XXXX"
         return {
             "category": "CONTACT",
             "key": "phone",
             "label": "Phone Number",
-            "sanitized_value": f"+91-******{val_clean[-4:]}" if len(val_clean) >= 4 else "[REDACTED_PHONE]",
+            "sanitized_value": f"[REDACTED_PHONE] (ends with {last4})",
             "sensitivity": "CRITICAL",
             "policy_action": "MASK"
         }
@@ -148,7 +149,19 @@ def categorize_and_sanitize(entity_type: str, raw_value: str, sensitivity: str =
             "policy_action": "MASK"
         }
 
-    # 8. Health & Clinical Markers
+    # 8. Financial & Payment Cards (Card Numbers, Bank Details)
+    if any(k in etype for k in ["FINANCIAL", "CARD", "PAYMENT", "BANK", "ACCOUNT", "CREDIT"]):
+        last4 = val_clean[-4:] if len(val_clean) >= 4 else "XXXX"
+        return {
+            "category": "FINANCIAL",
+            "key": "card_number",
+            "label": "Payment Card / Account",
+            "sanitized_value": f"[REDACTED_CARD] (ending in {last4})",
+            "sensitivity": "CRITICAL",
+            "policy_action": "MASK"
+        }
+
+    # 9. Health & Clinical Markers
     if any(k in etype for k in ["HEALTH", "BLOOD", "DIABETES", "MEDICAL", "SUGAR", "HBA1C", "LIVER"]):
         return {
             "category": "HEALTH",
@@ -251,6 +264,50 @@ def wipe_persona_vault(user_id: str = "default_user") -> int:
     """Completely wipes the persona vault for a fresh zero-state start."""
     execute("DELETE FROM persona_attributes WHERE user_id=?", (user_id,))
     return 0
+
+
+def log_biometric_event(event_type: str, image_hash: str, purpose: str = "image_generation", user_id: str = "default_user") -> dict:
+    """Logs a biometric processing event to the persona vault.
+
+    Does NOT store the image or face data. Only stores:
+    - event_type: TYPE of event (e.g. "IMAGE_CHAT")
+    - image_hash: SHA-256 hash of the EXIF-stripped image (for audit only)
+    - purpose: why the image was processed
+    - sanitized_value: Always "Zero-retention event — Consent: GRANTED" or similar
+    - sensitivity: CRITICAL
+    - policy_action: ZERO_RETENTION
+
+    Returns the inserted attribute dict.
+    """
+    from db import execute, q, now_iso, new_id
+
+    attr_id = new_id("biometric")
+    ts = now_iso()
+    sanitized = "Zero-retention event — Consent: GRANTED"
+
+    execute(
+        """INSERT INTO persona_attributes 
+           (id, user_id, category, key, label, raw_value, sanitized_value, 
+            sensitivity, policy_action, source_snippet, updated_at)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
+        (attr_id, user_id, "BIOMETRIC_EVENTS", "image_event",
+         "Biometric Image Processed", f"[IMAGE HASH: {image_hash}]", sanitized,
+         "CRITICAL", "ZERO_RETENTION", f"{event_type} at {ts}", ts)
+    )
+
+    return {
+        "id": attr_id,
+        "user_id": user_id,
+        "category": "BIOMETRIC_EVENTS",
+        "key": "image_event",
+        "label": "Biometric Image Processed",
+        "raw_value": f"[IMAGE HASH: {image_hash}]",
+        "sanitized_value": sanitized,
+        "sensitivity": "CRITICAL",
+        "policy_action": "ZERO_RETENTION",
+        "source_snippet": f"{event_type} at {ts}",
+        "updated_at": ts
+    }
 
 
 def build_semantic_persona_context(user_id: str = "default_user") -> str:

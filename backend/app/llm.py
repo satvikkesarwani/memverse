@@ -42,22 +42,33 @@ class NVIDIAProvider(LLMProvider):
         t0 = time.perf_counter()
         if not NVIDIA_KEY:
             raise RuntimeError("NVIDIA_API_KEY is not configured")
-        body = _json.dumps({
-            "model": self.model,
+        
+        # Check if payload contains multimodal image data
+        has_image = any(
+            isinstance(m.get("content"), list) and any(item.get("type") == "image_url" for item in m.get("content", []))
+            for m in messages
+        )
+        selected_model = "meta/llama-3.2-11b-vision-instruct" if has_image else self.model
+
+        payload_dict = {
+            "model": selected_model,
             "messages": messages,
             "max_tokens": 1024,
             "temperature": 0.6,
             "top_p": 0.9,
             "stream": True,
-            "chat_template_kwargs": {"enable_thinking": False},
-        }).encode("utf-8")
+        }
+        if not has_image:
+            payload_dict["chat_template_kwargs"] = {"enable_thinking": False}
+
+        body = _json.dumps(payload_dict).encode("utf-8")
         req = urllib.request.Request(
             NVIDIA_URL, data=body, method="POST",
             headers={"Authorization": f"Bearer {NVIDIA_KEY}",
                      "Content-Type": "application/json",
                      "Accept": "text/event-stream"},
         )
-        auditlog.model_request_sent(request_id, request_number, "", 0, self.name, self.model, 0)
+        auditlog.model_request_sent(request_id, request_number, "", 0, self.name, selected_model, 0)
         try:
             with urllib.request.urlopen(req, timeout=45) as resp:
                 in_think = False
@@ -115,11 +126,20 @@ class DemoProvider(LLMProvider):
 
     def generate_stream(self, messages: list[dict], purpose: str = "", request_id: str = "", request_number: int = 0):
         t0 = time.perf_counter()
-        user = messages[-1]["content"] if messages else ""
-        ctx = ""
-        for m in messages:
-            if m["role"] == "system":
-                ctx = m["content"]
+        last_msg = messages[-1] if messages else {"role": "user", "content": ""}
+        if isinstance(last_msg["content"], list):
+            # Multimodal — extract text part
+            user = next((p["text"] for p in last_msg["content"] if p["type"] == "text"), "")
+            ctx = ""
+            for m in messages:
+                if m["role"] == "system":
+                    ctx = m["content"] if isinstance(m["content"], str) else ""
+        else:
+            user = last_msg["content"]
+            ctx = ""
+            for m in messages:
+                if m["role"] == "system":
+                    ctx = m["content"]
         text = self._respond(user, ctx)
         auditlog.model_request_sent(request_id, request_number, "", 0, self.name, self.model, 0)
         words = text.split(" ")
@@ -131,11 +151,20 @@ class DemoProvider(LLMProvider):
 
     def generate(self, messages: list[dict], purpose: str = "", request_id: str = "", request_number: int = 0) -> dict:
         t0 = time.perf_counter()
-        user = messages[-1]["content"] if messages else ""
-        ctx = ""
-        for m in messages:
-            if m["role"] == "system":
-                ctx = m["content"]
+        last_msg = messages[-1] if messages else {"role": "user", "content": ""}
+        if isinstance(last_msg["content"], list):
+            # Multimodal — extract text part
+            user = next((p["text"] for p in last_msg["content"] if p["type"] == "text"), "")
+            ctx = ""
+            for m in messages:
+                if m["role"] == "system":
+                    ctx = m["content"] if isinstance(m["content"], str) else ""
+        else:
+            user = last_msg["content"]
+            ctx = ""
+            for m in messages:
+                if m["role"] == "system":
+                    ctx = m["content"]
         time.sleep(0.1)
         text = self._respond(user, ctx)
         auditlog.model_request_sent(request_id, request_number, "", 0, self.name, self.model, 0)

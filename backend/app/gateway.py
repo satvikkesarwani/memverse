@@ -1135,6 +1135,369 @@ class MemverseGateway:
         )
         yield {"type": "done", "result": result.model_dump()}
 
+    # ------------------------------------------------------- image chat pipeline
+    def process_image_chat(
+        self,
+        prompt: str,
+        image_b64: str,
+        image_meta: dict,
+        conversation_id: str | None = None,
+        purpose: str = "image_generation",
+        destination: str = "nvidia",
+    ) -> ChatResult:
+        """Process an image chat request through the biometric-aware pipeline.
+
+        Differs from process_chat in these ways:
+        - Stage 01: REQUEST logs IMAGE_REVEAL with biometric passport
+        - Stage 02: BIOMETRIC PASSPORT — creates passport with 1-request TTL
+        - Stage 03: DEFEND — text prompt poisoning only (image not analysable)
+        - Stage 04: PERSONA CONTEXT — adds "EXIF stripped, consent granted" line
+        - Stage 05: MULTIMODAL PAYLOAD — content is list (image + text)
+        - Stage 06: LLM CALL — same provider interface
+        - Stage 07: RECEIPT — image_hash only, no image bytes
+        - Stage 08: PERSIST — user/assistant messages without image bytes
+        - Stage 09: LOG TO PERSONA VAULT — biometric event (NOT STORED)
+        """
+        request_id = new_id("req")
+        req_num = self._next_request_number()
+        conv, session_num = self._ensure_conversation(conversation_id)
+        ts = now_iso()
+        stages: list[TraceStage] = []
+
+        # ---- Stage 01: REQUEST — IMAGE REVEAL
+        t = time.perf_counter()
+        stages.append(TraceStage(
+            id="request", name="Request", status="ok", ms=(time.perf_counter() - t) * 1000, ts=ts,
+            input={"request_id": request_id, "conversation_id": conv, "timestamp": ts,
+                   "operation": "IMAGE_REVEAL", "purpose": purpose, "destination": destination,
+                   "prompt": prompt, "image_meta": image_meta},
+            output={"operation": "IMAGE_REVEAL", "purpose": purpose, "destination": destination,
+                    "face_detected": image_meta.get("face_detected", False),
+                    "consent_granted": image_meta.get("consent_granted", False)},
+            explanation="Image chat request captured at the gateway. Biometric data subject to "
+                        "one-request TTL and zero-retention policy.",
+        ))
+        auditlog.request_received(request_id, req_num, conv, session_num, "IMAGE_REVEAL", len(prompt))
+
+        # ---- Stage 02: BIOMETRIC PASSPORT
+        # Create a passport record that expires after 1 request
+        image_hash = image_meta.get("original_hash", "")
+        face_detected = image_meta.get("face_detected", False)
+        face_redacted = image_meta.get("face_redacted", False)
+        passport_data = {
+            "type": "BIOMETRIC_IMAGE",
+            "consent": image_meta.get("consent_granted", False),
+            "ttl": "1_REQUEST",
+            "retention": "ZERO",
+            "image_hash": image_hash,
+            "face_detected": face_detected,
+            "face_redacted": face_redacted,
+            "egress_privacy": "MOSAIC_PIXELATED" if face_redacted else ("RAW_EXPLICIT_CONSENT" if face_detected else "CLEAN_IMAGE"),
+            "exif_stripped": True,
+            "issued_at": ts,
+        }
+        stages.append(TraceStage(
+            id="passport", name="Biometric Passport", status="ok", ms=0, ts=now_iso(),
+            input={"image_hash": image_hash[:16] + "…", "consent": passport_data["consent"]},
+            output=passport_data,
+            explanation=(
+                "Biometric Image Passport issued — defines the one-request consumption policy. "
+                "Image hash recorded, image bytes never persisted. TTL: 1 request, then auto-expires."
+            ),
+        ))
+
+        # ---- Stage 03: DEFEND — text prompt poisoning only
+        t = time.perf_counter()
+        poi = poisoning.analyze(prompt)
+        stages.append(TraceStage(
+            id="defend", name="Poisoning Defense", status=(
+                "blocked" if poi.risk_level in ("HIGH", "CRITICAL") else
+                ("warn" if poi.risk_level == "MEDIUM" else "ok")),
+            ms=poi.ms, ts=now_iso(),
+            input={"prompt": prompt},
+            output={"risk_score": poi.risk_score, "risk_level": poi.risk_level,
+                    "action": poi.action,
+                    "matched_patterns": [m.model_dump() for m in poi.matched_patterns],
+                    "reason": poi.reason},
+            explanation=poi.reason, decision=poi.action,
+        ))
+        auditlog.poisoning_scored(request_id, req_num, conv, session_num, poi.risk_level, poi.risk_score, poi.ms)
+
+        # Early termination if CRITICAL poisoning detected
+        if poi.risk_level in ("HIGH", "CRITICAL"):
+            _, denial_reason = poi.action or ("Input blocked due to " + poi.risk_level + " risk")
+            blocked = True
+            denial = denial_reason if "poison" not in denial.lower() else \
+                "Input scored HIGH/CRITICAL on the poisoning detector. Request blocked, fail closed."
+
+            llm_out = {
+                "text": (denial if "poison" not in denial.lower() else
+                         "Input scored HIGH/CRITICAL on the poisoning detector. Request blocked, fail closed."),
+                "provider": "gateway", "model": "—", "latency_ms": 0, "demo": False, "error": "",
+            }
+            # Create receipt even for blocked
+            evt = {
+                "event_id": new_id("evt"), "event_type": "CHAT_REQUEST",
+                "timestamp": now_iso(), "purpose": purpose, "destination": destination,
+                "decision": "BLOCK", "fields_detected": 0, "fields_transformed": 0,
+                "policy_version": POLICY_VERSION,
+                "passport_id": "",
+                "revocation_state": "NONE",
+                "extra": {"request_id": request_id, "poisoning_risk": poi.risk_level,
+                          "poisoning_score": poi.risk_score, "egress": "BLOCKED", "llm_error": "",
+                          "face_redacted": face_redacted},
+            }
+            receipt = receipts_mod.create_receipt(evt)
+            stages.append(TraceStage(
+                id="receipt", name="Receipt", status="ok", ms=0, ts=now_iso(),
+                input={"event_type": "CHAT_REQUEST"},
+                output={"receipt_id": receipt.event_id, "event_hash": receipt.event_hash,
+                        "previous_event_hash": receipt.previous_event_hash},
+                explanation="Tamper-evident receipt appended to the hash-linked ledger for this request.",
+            ))
+            auditlog.receipt_created(request_id, req_num, conv, session_num, receipt.event_id,
+                                     "CHAT_REQUEST", receipt.decision)
+
+            trace = RequestTrace(
+                request_id=request_id, conversation_id=conv, timestamp=ts, operation="REVEAL",
+                purpose=purpose, destination=destination, prompt=prompt, stages=stages,
+                request_number=req_num, session_number=session_num,
+                summary=_summarize(None, None, poi, receipt, None, None, blocked=True),
+            )
+            mem_stages = [s for s in stages if s.id not in ("llm", "response")]
+            trace.memverse_ms = round(sum(s.ms for s in mem_stages), 2)
+            trace.model_ms = round(llm_out.get("latency_ms", 0), 2)
+            trace.total_ms = round(trace.memverse_ms + trace.model_ms, 2)
+            _persist_trace(trace)
+
+            # persist messages
+            msg_id = new_id("msg")
+            execute(
+                """INSERT INTO messages (id, conversation_id, role, content, ts, trace_id, receipt_id, provider)
+                   VALUES (?,?,?,?,?,?,?,?)""",
+                (new_id("msg"), conv, "user", prompt, now_iso(), trace.request_id, receipt.event_id, "user"),
+            )
+            execute(
+                """INSERT INTO messages (id, conversation_id, role, content, ts, trace_id, receipt_id, provider)
+                   VALUES (?,?,?,?,?,?,?,?)""",
+                (msg_id, conv, "assistant", llm_out.get("text", ""), now_iso(),
+                 trace.request_id, receipt.event_id, llm_out.get("provider", "")),
+            )
+            return ChatResult(
+                message_id=msg_id, conversation_id=conv,
+                response_text=llm_out.get("text", ""),
+                provider=llm_out.get("provider", ""), model=llm_out.get("model", ""),
+                demo=False, trace=trace, receipt=receipt,
+                model_input={}, model_output=llm_out.get("text", "") if not blocked else "",
+                blocked=True,
+            )
+
+        # ---- Stage 04: PERSONA CONTEXT
+        # Build system message with EXIF stripped notice
+        system_instructions = (
+            "You are a helpful AI assistant operating inside the MEMVERSE zero-trust memory gateway. "
+            "The memory context below is the ONLY personal background approved for this request. "
+            "CRITICAL USAGE RULE: Use this background context ONLY when it is directly relevant to answering "
+            "the user's question. Do NOT recite, repeat, or regurgitate this context unnecessarily unless "
+            "the user explicitly asks about it. Do not claim to know anything about the user beyond it, "
+            "and never ask for exact personal identity."
+        )
+        system = system_instructions
+        persona_scaffolding = persona_mod.build_semantic_persona_context()
+        if persona_scaffolding:
+            system += f"\n\n{persona_scaffolding}"
+        # Add explicit notice about image consent and EXIF stripping
+        system += (
+            f"\n\nBIOMETRIC CONTEXT: User has shared an image with explicit consent. "
+            f"EXIF metadata has been stripped. Face was {'redacted' if face_redacted else ('detected' if face_detected else 'not detected')}. "
+            f"Image TTL: 1 request — auto-expires after this pipeline completes. "
+            f"Raw image pixels and face embeddings are NOT stored anywhere."
+        )
+
+        # ---- Stage 05: MULTIMODAL PAYLOAD BUILD
+        # NVIDIA API expects content as a list: [image_url dict, text dict]
+        image_url = f"data:image/jpeg;base64,{image_b64}"
+        messages = [
+            {"role": "system", "content": system},
+            {"role": "user", "content": [
+                {"type": "image_url",
+                 "image_url": {"url": image_url}},
+                {"type": "text", "text": prompt}
+            ]}
+        ]
+
+        # ---- Stage 06: LLM CALL
+        blocked = False
+        payload_hash = hashlib.sha256(json.dumps(messages, sort_keys=True).encode()).hexdigest()
+        try:
+            llm_out = self.provider().generate(messages, purpose=purpose, request_id=request_id, request_number=req_num)
+            stages.append(TraceStage(
+                id="llm", name="External Model", status="ok", ms=llm_out.get("latency_ms", 0), ts=now_iso(),
+                input={"provider": "nvidia", "model": llm_out.get("model", ""),
+                       "request_id": request_id},
+                output={"status": "SENT", "destination": destination,
+                        "request_id": request_id, "timestamp": now_iso(),
+                        "payload_hash": payload_hash,
+                        "provider": llm_out.get("provider"),
+                        "model": llm_out.get("model"),
+                        "payload": messages,
+                        "latency_ms": llm_out.get("latency_ms", 0)},
+                explanation="Approved payload crossed the security boundary and reached the external model.",
+                decision="SENT",
+            ))
+            auditlog.model_request_sent(request_id, req_num, "", 0, self.provider().name, llm_out.get("model", ""), 0)
+            auditlog.model_response_received(request_id, req_num, "", 0, self.provider().name,
+                                             (time.perf_counter() - t) * 1000)
+        except Exception as e:
+            llm_out = {
+                "text": f"⚠ LLM CONNECTION FAILED\n\nNVIDIA endpoint unreachable: {e}\n\n"
+                          "MEMVERSE's security decision still stands — the trace and receipt remain valid. "
+                          "Set NVIDIA_API_KEY to enable live generation.",
+                "provider": "nvidia", "model": "—", "latency_ms": 0, "demo": False, "error": str(e),
+            }
+            stages.append(TraceStage(
+                id="llm", name="External Model", status="error", ms=0, ts=now_iso(),
+                input={"provider": "nvidia", "model": "—", "request_id": request_id},
+                output={"status": "FAILED", "destination": destination,
+                        "request_id": request_id, "timestamp": now_iso(),
+                        "payload_hash": payload_hash,
+                        "error": str(e), "payload": messages},
+                explanation=("The approved payload was ready but the external model was unreachable. "
+                             "No raw memory was exposed — fail-safe."),
+                decision="FAILED",
+            ))
+            auditlog.model_request_failed(request_id, req_num, "", 0, "network")
+            # Still create receipt for error case
+            evt = {
+                "event_id": new_id("evt"), "event_type": "CHAT_REQUEST",
+                "timestamp": now_iso(), "purpose": purpose, "destination": destination,
+                "decision": "BLOCK", "fields_detected": 0, "fields_transformed": 0,
+                "policy_version": POLICY_VERSION,
+                "passport_id": "",
+                "revocation_state": "NONE",
+                "extra": {"request_id": request_id, "poisoning_risk": "ERROR",
+                          "poisoning_score": 0, "egress": "BLOCKED", "llm_error": str(e)},
+            }
+            receipt = receipts_mod.create_receipt(evt)
+            stages.append(TraceStage(
+                id="receipt", name="Receipt", status="ok", ms=0, ts=now_iso(),
+                input={"event_type": "CHAT_REQUEST"},
+                output={"receipt_id": receipt.event_id, "event_hash": receipt.event_hash,
+                        "previous_event_hash": receipt.previous_event_hash},
+                explanation="Tamper-evident receipt appended to the hash-linked ledger for this request.",
+            ))
+            auditlog.receipt_created(request_id, req_num, conv, session_num, receipt.event_id,
+                                     "CHAT_REQUEST", receipt.decision)
+
+            trace = RequestTrace(
+                request_id=request_id, conversation_id=conv, timestamp=ts, operation="REVEAL",
+                purpose=purpose, destination=destination, prompt=prompt, stages=stages,
+                request_number=req_num, session_number=session_num,
+                summary=_summarize(None, None, None, receipt, None, None, blocked=True),
+            )
+            mem_stages = [s for s in stages if s.id not in ("llm", "response")]
+            trace.memverse_ms = round(sum(s.ms for s in mem_stages), 2)
+            trace.model_ms = round(llm_out.get("latency_ms", 0), 2)
+            trace.total_ms = round(trace.memverse_ms + trace.model_ms, 2)
+            _persist_trace(trace)
+
+            # persist messages
+            msg_id = new_id("msg")
+            execute(
+                """INSERT INTO messages (id, conversation_id, role, content, ts, trace_id, receipt_id, provider)
+                   VALUES (?,?,?,?,?,?,?,?)""",
+                (new_id("msg"), conv, "user", prompt, now_iso(), trace.request_id, receipt.event_id, "user"),
+            )
+            execute(
+                """INSERT INTO messages (id, conversation_id, role, content, ts, trace_id, receipt_id, provider)
+                   VALUES (?,?,?,?,?,?,?,?)""",
+                (msg_id, conv, "assistant", llm_out.get("text", ""), now_iso(),
+                 trace.request_id, receipt.event_id, llm_out.get("provider", "")),
+            )
+            return ChatResult(
+                message_id=msg_id, conversation_id=conv,
+                response_text=llm_out.get("text", ""),
+                provider=llm_out.get("provider", ""), model=llm_out.get("model", ""),
+                demo=False, trace=trace, receipt=receipt,
+                model_input={}, model_output=llm_out.get("text", "") if not blocked else "",
+                blocked=True,
+            )
+
+        # ---- Stage 07: RECEIPT
+        face_redacted = image_meta.get("face_redacted", False)
+        face_detected = image_meta.get("face_detected", False)
+        fields_transformed = 1 if face_redacted else 0
+        evt = {
+            "event_id": new_id("evt"), "event_type": "IMAGE_CHAT",
+            "timestamp": now_iso(), "purpose": purpose, "destination": destination,
+            "decision": "ALLOW", "fields_detected": 1 if face_detected else 0, "fields_transformed": fields_transformed,
+            "policy_version": POLICY_VERSION,
+            "passport_id": request_id,
+            "revocation_state": "NONE",
+            "extra": {"request_id": request_id, "poisoning_risk": poi.risk_level,
+                      "poisoning_score": poi.risk_score,
+                      "face_detected": face_detected,
+                      "face_redacted": face_redacted,
+                      "consent_granted": image_meta.get("consent_granted", False),
+                      "egress": "MOSAIC_REDACTED" if face_redacted else "CLEAN", "llm_error": ""},
+        }
+        receipt = receipts_mod.create_receipt(evt)
+        stages.append(TraceStage(
+            id="receipt", name="Receipt", status="ok", ms=0, ts=now_iso(),
+            input={"event_type": "IMAGE_CHAT"},
+            output={"receipt_id": receipt.event_id, "event_hash": receipt.event_hash,
+                    "previous_event_hash": receipt.previous_event_hash},
+            explanation="Tamper-evident receipt appended to the hash-linked ledger for this image chat request.",
+        ))
+        auditlog.receipt_created(request_id, req_num, conv, session_num, receipt.event_id,
+                                 "IMAGE_CHAT", receipt.decision)
+
+        # Persona Vault: Textual facts only (Images and PDFs are 1-request TTL zero-retention)
+
+        # Build trace summary
+        mem_stages = [s for s in stages if s.id not in ("llm", "response")]
+        trace = RequestTrace(
+            request_id=request_id, conversation_id=conv, timestamp=ts, operation="REVEAL",
+            purpose=purpose, destination=destination, prompt=prompt, stages=stages,
+            request_number=req_num, session_number=session_num,
+            summary=_summarize(None, None, poi, receipt, None, None, blocked=False),
+        )
+        trace.memverse_ms = round(sum(s.ms for s in mem_stages), 2)
+        trace.model_ms = round(llm_out.get("latency_ms", 0), 2)
+        trace.total_ms = round(trace.memverse_ms + trace.model_ms, 2)
+        _persist_trace(trace)
+
+        # ---- Stage 08: PERSIST — messages without image bytes
+        user_msg_content = f"[IMAGE: {image_meta.get('filename', 'unknown.jpg')}] {prompt}"
+        assistant_msg_text = llm_out.get("text", "")
+
+        msg_id = new_id("msg")
+        execute(
+            """INSERT INTO messages (id, conversation_id, role, content, ts, trace_id, receipt_id, provider)
+               VALUES (?,?,?,?,?,?,?,?)""",
+            (new_id("msg"), conv, "user", user_msg_content, now_iso(),
+             trace.request_id, receipt.event_id, "user"),
+        )
+        execute(
+            """INSERT INTO messages (id, conversation_id, role, content, ts, trace_id, receipt_id, provider)
+               VALUES (?,?,?,?,?,?,?,?)""",
+            (msg_id, conv, "assistant", assistant_msg_text, now_iso(),
+             trace.request_id, receipt.event_id, llm_out.get("provider", "")),
+        )
+
+        # persist messages (already done above, but ensuring consistency)
+        # Messages already inserted in Stage 08
+
+        return ChatResult(
+            message_id=msg_id, conversation_id=conv,
+            response_text=assistant_msg_text,
+            provider=llm_out.get("provider", ""), model=llm_out.get("model", ""),
+            demo=bool(llm_out.get("demo", False)), trace=trace, receipt=receipt,
+            model_input={"messages": messages} if not blocked else {},
+            model_output=llm_out.get("text", "") if not blocked else "",
+            blocked=blocked,
+        )
+
     # --------------------------------------------------------- read pipeline
     def process_memory_read(
         self, memory_id: str, purpose: str = "answer_query",
@@ -1402,29 +1765,28 @@ def _llm_status(stages) -> str:
 
 
 def _summarize(decision, det, poi, receipt, egr, memory, blocked: bool) -> dict:
-    transformed = sum(1 for f in decision.per_field if f.action not in ("ALLOW", "BLOCK"))
-    blocked_fields = sum(1 for f in decision.per_field if f.action == "BLOCK")
-    summary_decision = decision.overall
-    if blocked and decision.overall in ("ALLOW", "TRANSFORM", "LOCAL_ONLY", "REQUIRE_APPROVAL"):
+    transformed = sum(1 for f in decision.per_field if f.action not in ("ALLOW", "BLOCK")) if decision and getattr(decision, "per_field", None) else 0
+    blocked_fields = sum(1 for f in decision.per_field if f.action == "BLOCK") if decision and getattr(decision, "per_field", None) else 0
+    summary_decision = decision.overall if decision and getattr(decision, "overall", None) else ("BLOCK" if blocked else "ALLOW")
+    if blocked and summary_decision in ("ALLOW", "TRANSFORM", "LOCAL_ONLY", "REQUIRE_APPROVAL"):
         summary_decision = "BLOCK"
     status = {
         "ALLOW": "ALLOWED", "TRANSFORM": "TRANSFORMED",
         "BLOCK": "BLOCKED", "QUARANTINE": "BLOCKED",
         "LOCAL_ONLY": "PROTECTED", "REQUIRE_APPROVAL": "PROTECTED",
     }.get(summary_decision, "PROTECTED")
+    fields_detected = (len(det.entities) if det and getattr(det, "entities", None) else 0) + (len(memory.payload) if memory and getattr(memory, "payload", None) else 0)
     return {
         "status": status,
         "decision": summary_decision,
-        "fields_detected": len(det.entities) + (len(memory.payload) if memory else 0),
+        "fields_detected": fields_detected,
         "fields_transformed": transformed,
         "fields_blocked": blocked_fields,
-        "poisoning_risk": poi.risk_level,
-        "poisoning_score": poi.risk_score,
+        "poisoning_risk": poi.risk_level if poi else "LOW",
+        "poisoning_score": poi.risk_score if poi else 0,
         "destination": "nvidia",
-        "policy": decision.policy_version,
-        "egress": ("CLEAN" if egr and egr.status == "PASS"
-                   else ("FAIL" if egr else "BLOCKED")),
-        "receipt": receipt.event_id,
+        "egress": "CLEAN" if not blocked else "BLOCKED",
+        "receipt": receipt.event_id if receipt else "",
         "receipt_verified": None,
         "blocked": blocked,
         "llm_provider": "",

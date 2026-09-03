@@ -14,6 +14,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 import document_parser
+import base64
 
 load_dotenv(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env"))
 
@@ -26,6 +27,7 @@ import policy as policy_mod
 import memory as memory_store
 import persona as persona_mod
 import security_tests
+import image_scanner
 
 app = FastAPI(title="MEMVERSE Gateway API", version="1.4.0")
 _cors_origins = [o.strip() for o in os.environ.get("MEMVERSE_CORS_ORIGINS", "*").split(",") if o.strip()]
@@ -272,6 +274,54 @@ async def chat_document_stream(
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+@app.post("/api/chat/image")
+async def chat_image(
+    image: UploadFile = File(...),
+    prompt: str = Form(...),
+    conversation_id: str = Form(""),
+    purpose: str = Form("image_generation"),
+    destination: str = Form("nvidia"),
+    consent_granted: str = Form("false"),
+    face_detected: str = Form("false"),
+    face_redacted: str = Form("false"),
+):
+    """Image Chat with Biometric Consent & Zero-Trust PII Stripping."""
+    # Gate 1 — Consent check
+    if consent_granted != "true":
+        raise HTTPException(403, "Consent required — image cannot be sent without explicit consent.")
+
+    # Read image bytes once
+    content = await image.read()
+
+    # Gate 2 — Run image_scanner validation
+    scan = image_scanner.process_image_upload(content, image.filename, face_detected, consent=True)
+    if not scan["success"]:
+        raise HTTPException(400, scan["error"])
+
+    # Gate 3 — Route to gateway
+    # Build base64 of clean (EXIF-stripped) image
+    image_b64 = scan["clean_b64"]
+
+    result = GATEWAY.process_image_chat(
+        prompt=prompt,
+        image_b64=image_b64,
+        image_meta={
+            "filename": image.filename,
+            "original_hash": scan["original_hash"],
+            "clean_hash": scan["clean_hash"],
+            "dimensions": scan["dimensions"],
+            "face_detected": face_detected == "true",
+            "face_redacted": face_redacted == "true",
+            "consent_granted": consent_granted == "true",
+            "purpose": purpose,
+            "destination": destination,
+        },
+        conversation_id=conversation_id or None,
+    )
+
+    return JSONResponse(content=result.model_dump())
 
 
 @app.get("/api/messages")
@@ -583,3 +633,6 @@ def index():
 
 if os.path.isdir(STATIC_DIR):
     app.mount("/assets", StaticFiles(directory=os.path.join(STATIC_DIR, "assets")), name="assets")
+    models_dir = os.path.join(STATIC_DIR, "models")
+    if os.path.isdir(models_dir):
+        app.mount("/models", StaticFiles(directory=models_dir), name="models")
