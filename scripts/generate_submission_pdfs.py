@@ -332,52 +332,31 @@ HTML_ONE_PAGE = f"""
   </table>
 
   <h2>🔗 Project Links & Live Deployments</h2>
-  <div class="grid-2" style="margin: 6px 0;">
-    <div class="card" style="border-top: 3px solid #06b6d4;">
-      <div class="card-title">🌐 Live Web Application (Vercel)</div>
-      <p style="margin-bottom: 3px; font-size: 8pt;">Interactive React/Vite app with ChatView, Identity Vault & Trace Radar:</p>
-      <a class="link-btn" href="https://memverse-satvikkesarwanis-projects.vercel.app">https://memverse-satvikkesarwanis-projects.vercel.app</a>
+  <div class="grid-2" style="margin: 12px 0; gap: 14px;">
+    <div class="card" style="border-top: 4px solid #06b6d4; padding: 14px 16px;">
+      <div class="card-title" style="font-size: 10pt;">🌐 Live Web Application (Vercel)</div>
+      <p style="margin-bottom: 6px; font-size: 8.5pt;">Interactive React/Vite app with ChatView, Identity Vault, and live Trace Radar:</p>
+      <a class="link-btn" style="font-size: 8.5pt;" href="https://memverse-satvikkesarwanis-projects.vercel.app">https://memverse-satvikkesarwanis-projects.vercel.app</a>
     </div>
-    <div class="card" style="border-top: 3px solid #6366f1;">
-      <div class="card-title">⚙️ Gateway API Service (Render)</div>
-      <p style="margin-bottom: 3px; font-size: 8pt;">FastAPI zero-trust gateway with live NVIDIA NIM integration:</p>
-      <a class="link-btn" href="https://memverse-api.onrender.com/api/status">https://memverse-api.onrender.com/api/status</a>
+    <div class="card" style="border-top: 4px solid #6366f1; padding: 14px 16px;">
+      <div class="card-title" style="font-size: 10pt;">⚙️ Gateway API Service (Render)</div>
+      <p style="margin-bottom: 6px; font-size: 8.5pt;">FastAPI zero-trust gateway with live NVIDIA NIM model integration:</p>
+      <a class="link-btn" style="font-size: 8.5pt;" href="https://memverse-api.onrender.com/api/status">https://memverse-api.onrender.com/api/status</a>
     </div>
-    <div class="card" style="border-top: 3px solid #10b981;">
-      <div class="card-title">💻 Source Code Repository (GitHub)</div>
-      <p style="margin-bottom: 3px; font-size: 8pt;">Monorepo including frontend, backend, test suite & Playwright E2E:</p>
-      <a class="link-btn" href="https://github.com/satvikkesarwani/memverse">https://github.com/satvikkesarwani/memverse</a>
+    <div class="card" style="border-top: 4px solid #10b981; padding: 14px 16px;">
+      <div class="card-title" style="font-size: 10pt;">💻 Source Code Repository (GitHub)</div>
+      <p style="margin-bottom: 6px; font-size: 8.5pt;">Full monorepo including frontend, backend, test suite & Playwright E2E:</p>
+      <a class="link-btn" style="font-size: 8.5pt;" href="https://github.com/satvikkesarwani/memverse">https://github.com/satvikkesarwani/memverse</a>
     </div>
-    <div class="card" style="border-top: 3px solid #f59e0b;">
-      <div class="card-title">📁 Memverse Project Details (Drive)</div>
-      <p style="margin-bottom: 3px; font-size: 8pt;">Submission folder containing video demo, architectural assets & documentation:</p>
-      <a class="link-btn" href="https://drive.google.com/drive/folders/1UO3jMmCsiOP9CiwQckT6S5NyeJYVo_f9?usp=sharing">https://drive.google.com/drive/folders/1UO3jMmCsiOP9CiwQckT6S5NyeJYVo_f9?usp=sharing</a>
-    </div>
-  </div>
-
-  <h2>⚡ Core Innovations & Technical Highlights</h2>
-  <div class="grid-2" style="margin: 6px 0; font-size: 8pt;">
-    <div class="card">
-      <strong>1. 12-Stage Zero-Trust Pipeline:</strong> Synchronous pipeline performing NER detection, prompt injection defense, policy transformation, and egress gatekeeping in &lt;15ms.
-    </div>
-    <div class="card">
-      <strong>2. Multimodal Privacy Engine:</strong> Automated redaction for uploaded PDF grade sheets and browser-native facial biometric detection with explicit consent.
-    </div>
-    <div class="card">
-      <strong>3. Cryptographic Memory Passports:</strong> Scoped access tokens with strict TTL expiration and instant revocation mechanisms.
-    </div>
-    <div class="card">
-      <strong>4. Tamper-Evident Hash Receipts:</strong> SHA-256 Merkle-style audit ledger providing non-repudiation and verifiable mathematical proofs.
+    <div class="card" style="border-top: 4px solid #f59e0b; padding: 14px 16px;">
+      <div class="card-title" style="font-size: 10pt;">📁 Memverse Project Details (Drive)</div>
+      <p style="margin-bottom: 6px; font-size: 8.5pt;">Submission folder with video demo, architectural assets & documentation:</p>
+      <a class="link-btn" style="font-size: 8.5pt;" href="https://drive.google.com/drive/folders/1UO3jMmCsiOP9CiwQckT6S5NyeJYVo_f9?usp=sharing">https://drive.google.com/drive/folders/1UO3jMmCsiOP9CiwQckT6S5NyeJYVo_f9?usp=sharing</a>
     </div>
   </div>
 
-  <div style="margin-top: 10px; background: #f8fafc; border: 1px solid #e2e8f0; padding: 6px 10px; border-radius: 6px; font-size: 8pt; color: #475569; display: flex; justify-content: space-between;">
-    <span><strong>Tech Stack:</strong> React 18, Vite, FastAPI, Python 3.11, NVIDIA NIM API, Cryptography (AES-256), face-api.js, PyPDF</span>
-    <span><strong>License:</strong> MIT</span>
-  </div>
-
-  <div class="footer-stamp" style="margin-top: 10px; padding-top: 6px;">
-    <span>MEMVERSE Submission Cover · Satvik Kesarwani</span>
+  <div class="footer-stamp" style="margin-top: 35px; padding-top: 12px;">
+    <span>MEMVERSE Submission Sheet · Satvik Kesarwani</span>
     <span>Live App: memverse-satvikkesarwanis-projects.vercel.app</span>
   </div>
 
