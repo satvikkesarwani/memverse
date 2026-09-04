@@ -194,25 +194,106 @@ HTML_ONE_PAGE = f"""
     {FORMAL_CSS}
     @page {{
       size: A4;
-      margin: 12mm 18mm 12mm 18mm;
+      margin: 11mm 16mm 11mm 16mm;
       @bottom-right {{ content: none; }}
     }}
     body {{
-      font-size: 8.8pt;
-      line-height: 1.4;
+      font-size: 8.9pt;
+      line-height: 1.48;
+      color: #1f2937;
     }}
-    h1 {{ font-size: 14pt; margin-bottom: 3px; }}
-    .doc-subtitle {{ font-size: 8.8pt; margin-bottom: 10px; }}
-    h2 {{ font-size: 10.5pt; margin-top: 10px; margin-bottom: 5px; padding-bottom: 2px; }}
-    p {{ margin-bottom: 5px; }}
-    table {{ margin: 5px 0; font-size: 8pt; }}
-    th, td {{ padding: 4px 6px; }}
-    .link-item {{ margin-bottom: 6px; }}
-    .link-label {{ font-size: 8.2pt; font-weight: 600; color: #111827; margin-bottom: 1px; }}
-    .link-desc {{ font-size: 7.8pt; color: #4b5563; margin-bottom: 1px; }}
-    .link-text {{ font-size: 7.8pt; font-family: 'JetBrains Mono', monospace; color: #1d4ed8; text-decoration: none; word-break: break-all; }}
-    .doc-header {{ margin-bottom: 10px; padding-bottom: 6px; }}
-    .footer-line {{ margin-top: 12px; padding-top: 6px; font-size: 7.8pt; }}
+    .doc-header {{ 
+      margin-bottom: 12px; 
+      padding-bottom: 8px; 
+      border-bottom: 1.5px solid #111827;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+    }}
+    h1 {{ 
+      font-size: 13.5pt; 
+      margin-bottom: 3px; 
+      line-height: 1.25;
+      letter-spacing: -0.2px;
+      font-weight: 700;
+      color: #111827;
+    }}
+    .doc-subtitle {{ 
+      font-size: 8.8pt; 
+      color: #4b5563;
+      margin-bottom: 11px; 
+      line-height: 1.35;
+    }}
+    h2 {{ 
+      font-size: 10.2pt; 
+      margin-top: 11px; 
+      margin-bottom: 6px; 
+      padding-bottom: 2px; 
+      border-bottom: 1px solid #e5e7eb;
+      font-weight: 700;
+      color: #111827;
+    }}
+    p {{ 
+      margin-bottom: 6px; 
+      line-height: 1.48;
+      color: #374151;
+      text-align: justify;
+    }}
+    table {{ 
+      margin: 6px 0 9px 0; 
+      font-size: 8.2pt; 
+      border-collapse: collapse;
+      width: 100%;
+    }}
+    th {{
+      border-top: 1.5px solid #111827;
+      border-bottom: 1.5px solid #111827;
+      padding: 5px 6px;
+      font-weight: 600;
+      text-align: left;
+      color: #111827;
+    }}
+    td {{ 
+      padding: 5px 6px; 
+      line-height: 1.4;
+      border-bottom: 1px solid #e5e7eb;
+      color: #374151;
+      vertical-align: top;
+    }}
+    tr:last-child td {{
+      border-bottom: 1.5px solid #111827;
+    }}
+    .link-item {{ 
+      margin-bottom: 7px; 
+    }}
+    .link-label {{ 
+      font-size: 8.5pt; 
+      font-weight: 600; 
+      color: #111827; 
+      margin-bottom: 2px; 
+    }}
+    .link-desc {{ 
+      font-size: 7.9pt; 
+      color: #4b5563; 
+      margin-bottom: 2px; 
+      line-height: 1.35;
+    }}
+    .link-text {{ 
+      font-size: 7.9pt; 
+      font-family: 'JetBrains Mono', monospace; 
+      color: #1d4ed8; 
+      text-decoration: none; 
+      word-break: break-all; 
+    }}
+    .footer-line {{ 
+      margin-top: 14px; 
+      padding-top: 6px; 
+      font-size: 7.8pt; 
+      border-top: 1px solid #e5e7eb;
+      display: flex;
+      justify-content: space-between;
+      color: #6b7280;
+    }}
   </style>
 </head>
 <body>
@@ -231,10 +312,18 @@ HTML_ONE_PAGE = f"""
   <h1>MEMVERSE: Zero-Trust Privacy Gateway for Multimodal AI Memory</h1>
   <div class="doc-subtitle">A client-governed security architecture reconciling personalization and data privacy in large language models.</div>
 
-  <h2>1. Project Description</h2>
+  <h2>1. Project Description & Core Highlights</h2>
   <p>
-    MEMVERSE is a zero-trust privacy gateway designed to enable continuous, personalized AI interactions without exposing raw personal identifiers to external model providers. By enforcing a 12-stage security pipeline with dynamic policy transformations, cryptographic memory passports, and tamper-evident audit ledgers, MEMVERSE ensures that external LLMs receive only the minimum necessary generalized semantic context required to answer user queries across text, structured documents, and facial biometrics.
+    MEMVERSE is a zero-trust privacy gateway designed to enable continuous, personalized AI interactions without exposing raw personal identifiers to external model providers. By enforcing a 12-stage security pipeline with dynamic policy transformations, cryptographic memory passports, and tamper-evident audit ledgers, MEMVERSE ensures that external LLMs receive only the minimum necessary generalized semantic context.
   </p>
+  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px 16px; margin: 8px 0 12px 0; font-size: 8.5pt; color: #374151;">
+    <div style="background: #f9fafb; border-left: 3px solid #3b82f6; padding: 6px 10px; border-radius: 3px;">
+      <strong style="color: #1e3a8a;">12-Stage Security Pipeline:</strong> Client-side PII masking, biometric blinding, and context minimization.
+    </div>
+    <div style="background: #f9fafb; border-left: 3px solid #10b981; padding: 6px 10px; border-radius: 3px;">
+      <strong style="color: #065f46;">Cryptographic Audit Ledger:</strong> SHA-256 hash chaining guaranteeing immutable proof of compliance.
+    </div>
+  </div>
 
   <h2>2. Team Details</h2>
   <table>
@@ -266,31 +355,31 @@ HTML_ONE_PAGE = f"""
 
   <h2>3. Project Deliverables & Submission Links</h2>
   
-  <div class="link-item" style="border-left: 3.5px solid #dc2626; background: #fef2f2; padding: 5px 8px; border-radius: 4px; margin-bottom: 7px;">
+  <div class="link-item" style="border-left: 3.5px solid #dc2626; background: #fef2f2; padding: 8px 12px; border-radius: 4px; margin-bottom: 11px;">
     <div class="link-label" style="color: #b91c1c; font-weight: 700;">1. Project Video Demonstration (High Priority)</div>
     <div class="link-desc">Walkthrough video recording showcasing zero-trust memory, multimodal document ingestion, biometric privacy, and live trace inspection:</div>
     <a class="link-text" style="color: #dc2626; font-weight: 600;" href="https://drive.google.com/file/d/1VjpQrxNEmAkfgZdqcdH9a4bNIQCHAY9H/view?usp=sharing">https://drive.google.com/file/d/1VjpQrxNEmAkfgZdqcdH9a4bNIQCHAY9H/view?usp=sharing</a>
   </div>
 
-  <div class="link-item" style="border-left: 3.5px solid #dc2626; background: #fef2f2; padding: 5px 8px; border-radius: 4px; margin-bottom: 7px;">
+  <div class="link-item" style="border-left: 3.5px solid #dc2626; background: #fef2f2; padding: 8px 12px; border-radius: 4px; margin-bottom: 11px;">
     <div class="link-label" style="color: #b91c1c; font-weight: 700;">2. Live Working Prototype — Frontend (High Priority)</div>
     <div class="link-desc">Interactive web client featuring real-time chat, policy exploration, memory passport management, and 12-stage trace inspection:</div>
     <a class="link-text" style="color: #dc2626; font-weight: 600;" href="https://memverse-satvikkesarwanis-projects.vercel.app">https://memverse-satvikkesarwanis-projects.vercel.app</a>
   </div>
 
-  <div class="link-item">
+  <div class="link-item" style="padding-left: 12px; margin-bottom: 10px;">
     <div class="link-label">3. Gateway API Service (Backend)</div>
     <div class="link-desc">FastAPI zero-trust gateway service integrated with live NVIDIA NIM models and cryptographic ledger endpoints:</div>
     <a class="link-text" href="https://memverse-api.onrender.com/api/status">https://memverse-api.onrender.com/api/status</a>
   </div>
 
-  <div class="link-item">
+  <div class="link-item" style="padding-left: 12px; margin-bottom: 10px;">
     <div class="link-label">4. Source Code Repository</div>
     <div class="link-desc">Complete project source code repository including backend services, frontend application, and test suites:</div>
     <a class="link-text" href="https://github.com/satvikkesarwani/memverse">https://github.com/satvikkesarwani/memverse</a>
   </div>
 
-  <div class="link-item">
+  <div class="link-item" style="padding-left: 12px; margin-bottom: 10px;">
     <div class="link-label">5. Project Details & Demonstration Media Folder</div>
     <div class="link-desc">Submission repository containing project demonstration recordings, architecture diagrams, and supporting documentation:</div>
     <a class="link-text" href="https://drive.google.com/drive/folders/1UO3jMmCsiOP9CiwQckT6S5NyeJYVo_f9?usp=sharing">https://drive.google.com/drive/folders/1UO3jMmCsiOP9CiwQckT6S5NyeJYVo_f9?usp=sharing</a>
