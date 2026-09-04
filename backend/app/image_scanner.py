@@ -42,27 +42,27 @@ def validate_format(filename: str, bytes_: bytes) -> str | None:
 # Operation 3 — EXIF strip: recreate image from pixel data, no info dict.
 #    Critical: we must NOT just drop the EXIF tag — we must rebuild the image
 #    so that no hidden EXIF trailer survives.
-# ---------------------------------------------------------------------------
-def strip_exif(bytes_: bytes) -> tuple[bytes, bytes]:
-    """Strip EXIF metadata from JPEG/PNG bytes.
+def strip_exif(bytes_: bytes, max_dim: int = 1200) -> tuple[bytes, bytes]:
+    """Strip EXIF metadata and resize safely to preserve memory (Render Free 512MB RAM).
 
     Returns (clean_bytes, original_hash) where:
-      - clean_bytes: new image bytes with NO EXIF information
+      - clean_bytes: new image bytes with NO EXIF information, bounded resolution
       - original_hash: SHA-256 of the original bytes (for audit)
     """
     original_hash = hashlib.sha256(bytes_).hexdigest()
 
-    img = Image.open(BytesIO(bytes_))
+    with Image.open(BytesIO(bytes_)) as img:
+        # Convert to RGB directly to drop alpha/palette without allocating large raw lists
+        rgb_img = img.convert("RGB")
+        
+        # Downscale proportionally if resolution exceeds max_dim to avoid OOM spikes
+        if max(rgb_img.width, rgb_img.height) > max_dim:
+            rgb_img.thumbnail((max_dim, max_dim), Image.Resampling.LANCZOS)
 
-    # Rebuild from raw pixel data — ensures zero EXIF trailer
-    clean_img = Image.new(img.mode, img.size)
-    clean_img.putdata(list(img.getdata()))
-
-    # Save as new JPEG without any info dict (no EXIF)
-    out_buf = BytesIO()
-    rgb_img = clean_img.convert("RGB")
-    rgb_img.save(out_buf, format="JPEG", quality=85, optimize=False)
-    clean_bytes = out_buf.getvalue()
+        out_buf = BytesIO()
+        # Saving freshly converted RGB image without info dict strips 100% of EXIF trailers
+        rgb_img.save(out_buf, format="JPEG", quality=80, optimize=True)
+        clean_bytes = out_buf.getvalue()
 
     return clean_bytes, original_hash
 
