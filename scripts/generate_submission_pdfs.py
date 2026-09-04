@@ -194,25 +194,25 @@ HTML_ONE_PAGE = f"""
     {FORMAL_CSS}
     @page {{
       size: A4;
-      margin: 14mm 18mm 14mm 18mm;
+      margin: 12mm 18mm 12mm 18mm;
       @bottom-right {{ content: none; }}
     }}
     body {{
-      font-size: 9pt;
-      line-height: 1.45;
+      font-size: 8.8pt;
+      line-height: 1.4;
     }}
-    h1 {{ font-size: 15pt; margin-bottom: 4px; }}
-    .doc-subtitle {{ font-size: 9pt; margin-bottom: 12px; }}
-    h2 {{ font-size: 11pt; margin-top: 12px; margin-bottom: 6px; padding-bottom: 2px; }}
-    p {{ margin-bottom: 6px; }}
-    table {{ margin: 6px 0; font-size: 8.5pt; }}
-    th, td {{ padding: 5px 6px; }}
-    .link-item {{ margin-bottom: 8px; }}
-    .link-label {{ font-size: 8.5pt; }}
-    .link-desc {{ font-size: 8pt; margin-bottom: 2px; }}
-    .link-text {{ font-size: 8pt; }}
-    .doc-header {{ margin-bottom: 12px; padding-bottom: 8px; }}
-    .footer-line {{ margin-top: 14px; padding-top: 6px; }}
+    h1 {{ font-size: 14pt; margin-bottom: 3px; }}
+    .doc-subtitle {{ font-size: 8.8pt; margin-bottom: 10px; }}
+    h2 {{ font-size: 10.5pt; margin-top: 10px; margin-bottom: 5px; padding-bottom: 2px; }}
+    p {{ margin-bottom: 5px; }}
+    table {{ margin: 5px 0; font-size: 8pt; }}
+    th, td {{ padding: 4px 6px; }}
+    .link-item {{ margin-bottom: 6px; }}
+    .link-label {{ font-size: 8.2pt; font-weight: 600; color: #111827; margin-bottom: 1px; }}
+    .link-desc {{ font-size: 7.8pt; color: #4b5563; margin-bottom: 1px; }}
+    .link-text {{ font-size: 7.8pt; font-family: 'JetBrains Mono', monospace; color: #1d4ed8; text-decoration: none; word-break: break-all; }}
+    .doc-header {{ margin-bottom: 10px; padding-bottom: 6px; }}
+    .footer-line {{ margin-top: 12px; padding-top: 6px; font-size: 7.8pt; }}
   </style>
 </head>
 <body>
@@ -220,7 +220,7 @@ HTML_ONE_PAGE = f"""
   <div class="doc-header">
     <div>
       <div class="institution-tag">PROJECT SUBMISSION SHEET</div>
-      <div style="font-size: 12pt; font-weight: 700; color: #111827; margin-top: 2px;">MEMVERSE</div>
+      <div style="font-size: 11.5pt; font-weight: 700; color: #111827; margin-top: 2px;">MEMVERSE</div>
     </div>
     <div class="doc-meta">
       Academic Year: 2025–2026<br>
@@ -267,25 +267,31 @@ HTML_ONE_PAGE = f"""
   <h2>3. Project Deliverables & Submission Links</h2>
   
   <div class="link-item">
-    <div class="link-label">1. Live Working Prototype (Frontend Application)</div>
+    <div class="link-label">1. Project Video Demonstration</div>
+    <div class="link-desc">Walkthrough video recording showcasing zero-trust memory, multimodal document ingestion, biometric privacy, and live trace inspection:</div>
+    <a class="link-text" href="https://drive.google.com/file/d/1VjpQrxNEmAkfgZdqcdH9a4bNIQCHAY9H/view?usp=sharing">https://drive.google.com/file/d/1VjpQrxNEmAkfgZdqcdH9a4bNIQCHAY9H/view?usp=sharing</a>
+  </div>
+
+  <div class="link-item">
+    <div class="link-label">2. Live Working Prototype (Frontend Application)</div>
     <div class="link-desc">Interactive web client featuring real-time chat, policy exploration, memory passport management, and 12-stage trace inspection:</div>
     <a class="link-text" href="https://memverse-satvikkesarwanis-projects.vercel.app">https://memverse-satvikkesarwanis-projects.vercel.app</a>
   </div>
 
   <div class="link-item">
-    <div class="link-label">2. Gateway API Service (Backend)</div>
+    <div class="link-label">3. Gateway API Service (Backend)</div>
     <div class="link-desc">FastAPI zero-trust gateway service integrated with live NVIDIA NIM models and cryptographic ledger endpoints:</div>
     <a class="link-text" href="https://memverse-api.onrender.com/api/status">https://memverse-api.onrender.com/api/status</a>
   </div>
 
   <div class="link-item">
-    <div class="link-label">3. Source Code Repository</div>
+    <div class="link-label">4. Source Code Repository</div>
     <div class="link-desc">Complete project source code repository including backend services, frontend application, and test suites:</div>
     <a class="link-text" href="https://github.com/satvikkesarwani/memverse">https://github.com/satvikkesarwani/memverse</a>
   </div>
 
   <div class="link-item">
-    <div class="link-label">4. Project Details & Demonstration Media</div>
+    <div class="link-label">5. Project Details & Demonstration Media Folder</div>
     <div class="link-desc">Submission repository containing project demonstration recordings, architecture diagrams, and supporting documentation:</div>
     <a class="link-text" href="https://drive.google.com/drive/folders/1UO3jMmCsiOP9CiwQckT6S5NyeJYVo_f9?usp=sharing">https://drive.google.com/drive/folders/1UO3jMmCsiOP9CiwQckT6S5NyeJYVo_f9?usp=sharing</a>
   </div>
