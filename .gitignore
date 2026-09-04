@@ -1,0 +1,22 @@
+# MCP & Local Agents
+.agents/mcp_config.json
+
+# Environment files & Secrets
+.env
+.env.local
+*.env
+
+# Dependencies & Builds
+node_modules/
+dist/
+build/
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+
+# Databases & logs
+*.db
+*.log
+uploads/

@@ -1,7 +1,10 @@
 // MEMVERSE API client — talks ONLY to the gateway. Never to NVIDIA.
 
+const API_BASE = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '')
+const apiUrl = (path) => `${API_BASE}${path}`
+
 async function jfetch(url, options = {}) {
-  const res = await fetch(url, {
+  const res = await fetch(apiUrl(url), {
     headers: { 'Content-Type': 'application/json' },
     ...options,
   })
@@ -21,7 +24,7 @@ export const api = {
   chat: (prompt, conversationId, purpose = 'answer_query', destination = 'nvidia') =>
     jfetch('/api/chat', { method: 'POST', body: JSON.stringify({ prompt, conversation_id: conversationId, purpose, destination }) }),
   chatStream: async (prompt, conversationId, onDelta, purpose = 'answer_query', destination = 'nvidia') => {
-    const res = await fetch('/api/chat/stream', {
+    const res = await fetch(apiUrl('/api/chat/stream'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ prompt, conversation_id: conversationId, purpose, destination }),
@@ -77,7 +80,7 @@ export const api = {
   learnExport: (body = {}) => jfetch('/api/learn/export', { method: 'POST', body: JSON.stringify(body) }),
   documentSamples: () => jfetch('/api/documents/samples'),
   chatDocument: async (formData) => {
-    const res = await fetch('/api/chat/document', { method: 'POST', body: formData })
+    const res = await fetch(apiUrl('/api/chat/document'), { method: 'POST', body: formData })
     if (!res.ok) {
       let detail = res.statusText
       try {
@@ -89,7 +92,7 @@ export const api = {
     return res.json()
   },
   chatDocumentStream: async (formData, onDelta) => {
-    const res = await fetch('/api/chat/document/stream', { method: 'POST', body: formData })
+    const res = await fetch(apiUrl('/api/chat/document/stream'), { method: 'POST', body: formData })
     if (!res.ok) {
       let detail = res.statusText
       try {
@@ -126,7 +129,7 @@ export const api = {
     return finalResult
   },
   chatImageStream: async (formData, onDelta) => {
-    const res = await fetch('/api/chat/image/stream', { method: 'POST', body: formData })
+    const res = await fetch(apiUrl('/api/chat/image/stream'), { method: 'POST', body: formData })
     if (!res.ok) {
       let detail = res.statusText
       try {
@@ -163,7 +166,7 @@ export const api = {
     return finalResult
   },
   chatImage: async (formData) => {
-    const res = await fetch('/api/chat/image', { method: 'POST', body: formData })
+    const res = await fetch(apiUrl('/api/chat/image'), { method: 'POST', body: formData })
     if (!res.ok) {
       let detail = res.statusText
       try {

@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: memverse-api
+    runtime: python
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn api:app --app-dir app --host 0.0.0.0 --port $PORT
+    plan: free
+    region: oregon
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: NVIDIA_API_KEY
+        sync: false
+      - key: MEMVERSE_CORS_ORIGINS
+        value: "*"
