@@ -266,16 +266,16 @@ HTML_ONE_PAGE = f"""
 
   <h2>3. Project Deliverables & Submission Links</h2>
   
-  <div class="link-item">
-    <div class="link-label">1. Project Video Demonstration</div>
+  <div class="link-item" style="border-left: 3.5px solid #dc2626; background: #fef2f2; padding: 5px 8px; border-radius: 4px; margin-bottom: 7px;">
+    <div class="link-label" style="color: #b91c1c; font-weight: 700;">1. Project Video Demonstration (High Priority)</div>
     <div class="link-desc">Walkthrough video recording showcasing zero-trust memory, multimodal document ingestion, biometric privacy, and live trace inspection:</div>
-    <a class="link-text" href="https://drive.google.com/file/d/1VjpQrxNEmAkfgZdqcdH9a4bNIQCHAY9H/view?usp=sharing">https://drive.google.com/file/d/1VjpQrxNEmAkfgZdqcdH9a4bNIQCHAY9H/view?usp=sharing</a>
+    <a class="link-text" style="color: #dc2626; font-weight: 600;" href="https://drive.google.com/file/d/1VjpQrxNEmAkfgZdqcdH9a4bNIQCHAY9H/view?usp=sharing">https://drive.google.com/file/d/1VjpQrxNEmAkfgZdqcdH9a4bNIQCHAY9H/view?usp=sharing</a>
   </div>
 
-  <div class="link-item">
-    <div class="link-label">2. Live Working Prototype (Frontend Application)</div>
+  <div class="link-item" style="border-left: 3.5px solid #dc2626; background: #fef2f2; padding: 5px 8px; border-radius: 4px; margin-bottom: 7px;">
+    <div class="link-label" style="color: #b91c1c; font-weight: 700;">2. Live Working Prototype — Frontend (High Priority)</div>
     <div class="link-desc">Interactive web client featuring real-time chat, policy exploration, memory passport management, and 12-stage trace inspection:</div>
-    <a class="link-text" href="https://memverse-satvikkesarwanis-projects.vercel.app">https://memverse-satvikkesarwanis-projects.vercel.app</a>
+    <a class="link-text" style="color: #dc2626; font-weight: 600;" href="https://memverse-satvikkesarwanis-projects.vercel.app">https://memverse-satvikkesarwanis-projects.vercel.app</a>
   </div>
 
   <div class="link-item">
