@@ -240,24 +240,26 @@ HTML_ONE_PAGE = f"""
   <table>
     <thead>
       <tr>
-        <th style="width: 25%;">Role</th>
-        <th style="width: 30%;">Name</th>
-        <th style="width: 45%;">Affiliation & Identification</th>
+        <th style="width: 28%;">Name</th>
+        <th style="width: 22%;">Role</th>
+        <th style="width: 50%;">Institution & Department</th>
       </tr>
     </thead>
     <tbody>
       <tr>
-        <td><strong>Project Lead & Developer</strong></td>
-        <td>Satvik Kesarwani</td>
+        <td><strong>Satvik Kesarwani</strong></td>
+        <td>Team Lead</td>
         <td>
           Indian Institute of Information Technology (IIIT), Pune<br>
-          B.Tech, Computer Science and Engineering<br>
-          MIS Number: 112315166
+          B.Tech, Computer Science and Engineering (MIS: <code>112315166</code>)
         </td>
       </tr>
       <tr>
-        <td><strong>Team Identifier</strong></td>
-        <td colspan="2">Team MEMVERSE</td>
+        <td><strong>Astha Jain</strong></td>
+        <td>Core Developer</td>
+        <td>
+          Institute of Engineering and Technology (IET DAVV), Indore
+        </td>
       </tr>
     </tbody>
   </table>
@@ -290,7 +292,7 @@ HTML_ONE_PAGE = f"""
 
   <div class="footer-line">
     <span>MEMVERSE Official Project Submission</span>
-    <span>Author: Satvik Kesarwani (IIIT Pune)</span>
+    <span>Team: Satvik Kesarwani (IIIT Pune) · Astha Jain (IET DAVV Indore)</span>
   </div>
 
 </body>
@@ -419,7 +421,7 @@ HTML_DOC1 = f"""
 
   <div class="footer-line">
     <span>MEMVERSE Problem Definition & Technical Rationale</span>
-    <span>Author: Satvik Kesarwani</span>
+    <span>Authors: Satvik Kesarwani (IIIT Pune) · Astha Jain (IET DAVV Indore)</span>
   </div>
 
 </body>
@@ -608,7 +610,7 @@ HTML_DOC2 = f"""
 
   <div class="footer-line">
     <span>MEMVERSE System Architecture Specification</span>
-    <span>Author: Satvik Kesarwani</span>
+    <span>Authors: Satvik Kesarwani (IIIT Pune) · Astha Jain (IET DAVV Indore)</span>
   </div>
 
 </body>
