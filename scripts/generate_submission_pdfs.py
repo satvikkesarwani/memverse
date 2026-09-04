@@ -358,7 +358,7 @@ HTML_ONE_PAGE = f"""
   <div class="link-item" style="border-left: 3.5px solid #dc2626; background: #fef2f2; padding: 8px 12px; border-radius: 4px; margin-bottom: 11px;">
     <div class="link-label" style="color: #b91c1c; font-weight: 700;">1. Project Video Demonstration (High Priority)</div>
     <div class="link-desc">Walkthrough video recording showcasing zero-trust memory, multimodal document ingestion, biometric privacy, and live trace inspection:</div>
-    <a class="link-text" style="color: #dc2626; font-weight: 600;" href="https://drive.google.com/file/d/1VjpQrxNEmAkfgZdqcdH9a4bNIQCHAY9H/view?usp=sharing">https://drive.google.com/file/d/1VjpQrxNEmAkfgZdqcdH9a4bNIQCHAY9H/view?usp=sharing</a>
+    <a class="link-text" style="color: #dc2626; font-weight: 600;" href="https://drive.google.com/file/d/1e4DUPKJFRn8kHA-oh3Vfs9peIuY1iPIF/view?usp=sharing">https://drive.google.com/file/d/1e4DUPKJFRn8kHA-oh3Vfs9peIuY1iPIF/view?usp=sharing</a>
   </div>
 
   <div class="link-item" style="border-left: 3.5px solid #dc2626; background: #fef2f2; padding: 8px 12px; border-radius: 4px; margin-bottom: 11px;">
