@@ -19,7 +19,7 @@ load_dotenv(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file_
 import auditlog
 
 NVIDIA_URL = os.environ.get("NVIDIA_BASE_URL", "https://integrate.api.nvidia.com/v1/chat/completions")
-NVIDIA_MODEL = os.environ.get("NVIDIA_MODEL", "nvidia/nemotron-3.5-lightning-30b-a3b")
+NVIDIA_MODEL = os.environ.get("NVIDIA_MODEL", "meta/llama-3.2-11b-vision-instruct")
 NVIDIA_KEY = os.environ.get("NVIDIA_API_KEY", "").strip()
 
 
@@ -43,23 +43,16 @@ class NVIDIAProvider(LLMProvider):
         if not NVIDIA_KEY:
             raise RuntimeError("NVIDIA_API_KEY is not configured")
         
-        # Check if payload contains multimodal image data
-        has_image = any(
-            isinstance(m.get("content"), list) and any(item.get("type") == "image_url" for item in m.get("content", []))
-            for m in messages
-        )
-        selected_model = "meta/llama-3.2-11b-vision-instruct" if has_image else self.model
+        selected_model = self.model
 
         payload_dict = {
             "model": selected_model,
             "messages": messages,
             "max_tokens": 1024,
-            "temperature": 0.6,
+            "temperature": 0.5,
             "top_p": 0.9,
             "stream": True,
         }
-        if not has_image:
-            payload_dict["chat_template_kwargs"] = {"enable_thinking": False}
 
         body = _json.dumps(payload_dict).encode("utf-8")
         req = urllib.request.Request(
@@ -70,7 +63,7 @@ class NVIDIAProvider(LLMProvider):
         )
         auditlog.model_request_sent(request_id, request_number, "", 0, self.name, selected_model, 0)
         try:
-            with urllib.request.urlopen(req, timeout=45) as resp:
+            with urllib.request.urlopen(req, timeout=60) as resp:
                 in_think = False
                 for raw_line in resp:
                     line = raw_line.decode("utf-8").strip()
