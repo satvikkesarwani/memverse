@@ -10,7 +10,7 @@ SHARED_CSS = """
 
 @page {
   size: A4;
-  margin: 18mm 16mm 18mm 16mm;
+  margin: 16mm 16mm 16mm 16mm;
   @bottom-right {
     content: "Page " counter(page) " of " counter(pages);
     font-family: 'Plus Jakarta Sans', sans-serif;
@@ -29,14 +29,14 @@ body {
   font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   color: #1e293b;
   background: #ffffff;
-  line-height: 1.6;
-  font-size: 10pt;
+  line-height: 1.55;
+  font-size: 9.5pt;
 }
 
 .cover-header {
   border-bottom: 2px solid #e2e8f0;
-  padding-bottom: 18px;
-  margin-bottom: 22px;
+  padding-bottom: 14px;
+  margin-bottom: 18px;
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
@@ -51,15 +51,15 @@ body {
   padding: 6px 14px;
   border-radius: 8px;
   font-weight: 800;
-  font-size: 12pt;
+  font-size: 11pt;
   letter-spacing: 0.5px;
 }
 
 .doc-meta {
   text-align: right;
-  font-size: 8.5pt;
+  font-size: 8pt;
   color: #64748b;
-  line-height: 1.4;
+  line-height: 1.35;
 }
 
 .doc-meta strong {
@@ -67,54 +67,54 @@ body {
 }
 
 h1 {
-  font-size: 20pt;
+  font-size: 18pt;
   font-weight: 800;
   color: #0f172a;
   letter-spacing: -0.5px;
   line-height: 1.25;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
 }
 
 .subtitle {
-  font-size: 11pt;
+  font-size: 10.5pt;
   color: #475569;
   font-weight: 500;
-  margin-bottom: 20px;
+  margin-bottom: 16px;
 }
 
 h2 {
-  font-size: 13pt;
+  font-size: 12pt;
   font-weight: 700;
   color: #1e1b4b;
-  margin-top: 22px;
-  margin-bottom: 10px;
+  margin-top: 18px;
+  margin-bottom: 8px;
   border-left: 4px solid #4f46e5;
   padding-left: 10px;
   letter-spacing: -0.2px;
 }
 
 h3 {
-  font-size: 11pt;
+  font-size: 10pt;
   font-weight: 600;
   color: #334155;
-  margin-top: 14px;
+  margin-top: 12px;
   margin-bottom: 6px;
 }
 
 p {
-  margin-bottom: 10px;
+  margin-bottom: 8px;
   color: #334155;
   text-align: justify;
 }
 
 ul, ol {
-  margin-left: 18px;
-  margin-bottom: 12px;
+  margin-left: 16px;
+  margin-bottom: 10px;
   color: #334155;
 }
 
 li {
-  margin-bottom: 4px;
+  margin-bottom: 3px;
 }
 
 .highlight-box {
@@ -122,8 +122,8 @@ li {
   border: 1px solid #e2e8f0;
   border-left: 4px solid #06b6d4;
   border-radius: 6px;
-  padding: 12px 14px;
-  margin: 14px 0;
+  padding: 10px 12px;
+  margin: 12px 0;
 }
 
 .danger-box {
@@ -131,8 +131,8 @@ li {
   border: 1px solid #fecdd3;
   border-left: 4px solid #e11d48;
   border-radius: 6px;
-  padding: 12px 14px;
-  margin: 14px 0;
+  padding: 10px 12px;
+  margin: 12px 0;
 }
 
 .success-box {
@@ -140,30 +140,30 @@ li {
   border: 1px solid #bbf7d0;
   border-left: 4px solid #16a34a;
   border-radius: 6px;
-  padding: 12px 14px;
-  margin: 14px 0;
+  padding: 10px 12px;
+  margin: 12px 0;
 }
 
 .grid-2 {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 12px;
-  margin: 14px 0;
+  gap: 10px;
+  margin: 12px 0;
 }
 
 .card {
   background: #ffffff;
   border: 1px solid #e2e8f0;
   border-radius: 8px;
-  padding: 12px 14px;
+  padding: 10px 12px;
   box-shadow: 0 1px 3px rgba(0,0,0,0.03);
 }
 
 .card-title {
   font-weight: 700;
-  font-size: 10pt;
+  font-size: 9.5pt;
   color: #0f172a;
-  margin-bottom: 6px;
+  margin-bottom: 4px;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -172,8 +172,8 @@ li {
 table {
   width: 100%;
   border-collapse: collapse;
-  margin: 14px 0;
-  font-size: 8.5pt;
+  margin: 12px 0;
+  font-size: 8pt;
 }
 
 th {
@@ -181,12 +181,12 @@ th {
   color: #ffffff;
   font-weight: 600;
   text-align: left;
-  padding: 8px 10px;
+  padding: 7px 9px;
   border: 1px solid #334155;
 }
 
 td {
-  padding: 7px 10px;
+  padding: 6px 9px;
   border: 1px solid #e2e8f0;
   color: #334155;
 }
@@ -201,16 +201,16 @@ tr:nth-child(even) {
   color: #0f172a;
   padding: 2px 6px;
   border-radius: 4px;
-  font-size: 8pt;
+  font-size: 7.5pt;
   border: 1px solid #cbd5e1;
 }
 
 .diagram-container {
   background: #0f172a;
   color: #f8fafc;
-  padding: 16px;
+  padding: 14px;
   border-radius: 8px;
-  margin: 16px 0;
+  margin: 14px 0;
   border: 1px solid #334155;
 }
 
@@ -220,22 +220,22 @@ tr:nth-child(even) {
 
 .stage-step {
   display: flex;
-  gap: 12px;
-  margin-bottom: 10px;
+  gap: 10px;
+  margin-bottom: 8px;
   align-items: flex-start;
 }
 
 .stage-num {
   background: #4f46e5;
   color: white;
-  width: 22px;
-  height: 22px;
+  width: 20px;
+  height: 20px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
   font-weight: 700;
-  font-size: 8pt;
+  font-size: 7.5pt;
   flex-shrink: 0;
   margin-top: 2px;
 }
@@ -245,14 +245,140 @@ tr:nth-child(even) {
 }
 
 .footer-stamp {
-  margin-top: 25px;
-  padding-top: 12px;
+  margin-top: 20px;
+  padding-top: 10px;
   border-top: 1px solid #e2e8f0;
   display: flex;
   justify-content: space-between;
-  font-size: 8pt;
+  font-size: 7.5pt;
   color: #94a3b8;
 }
+
+.link-btn {
+  display: inline-block;
+  color: #4f46e5;
+  text-decoration: none;
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 600;
+  word-break: break-all;
+}
+"""
+
+HTML_ONE_PAGE = f"""
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>MEMVERSE - Project Submission Overview</title>
+  <style>
+    {SHARED_CSS}
+    @page {{
+      size: A4;
+      margin: 12mm 14mm 12mm 14mm;
+      @bottom-right {{ content: none; }}
+    }}
+    body {{
+      font-size: 9pt;
+      line-height: 1.45;
+    }}
+    h1 {{ font-size: 16pt; margin-bottom: 4px; }}
+    .subtitle {{ font-size: 9.5pt; margin-bottom: 12px; }}
+    h2 {{ font-size: 11pt; margin-top: 12px; margin-bottom: 6px; }}
+    .highlight-box {{ padding: 8px 10px; margin: 8px 0; }}
+  </style>
+</head>
+<body>
+
+  <div class="cover-header" style="margin-bottom: 12px; padding-bottom: 10px;">
+    <div>
+      <div class="logo-badge">🛡️ MEMVERSE</div>
+      <div style="font-size: 8pt; color: #64748b; margin-top: 3px; font-weight: 600;">PROJECT SUBMISSION SHEET</div>
+    </div>
+    <div class="doc-meta">
+      <strong>Executive Overview</strong><br>
+      Date: September 4, 2026<br>
+      Status: <strong>Production Deployed & Verified</strong>
+    </div>
+  </div>
+
+  <h1>MEMVERSE — Zero-Trust Privacy Gateway for AI Memory</h1>
+  <div class="subtitle">Solving the Personalization vs. Privacy Paradox for Text, Documents & Multimodal AI</div>
+
+  <div class="highlight-box" style="border-left-color: #4f46e5; background: #f5f3ff;">
+    <strong>📌 Project Description (2-3 Line Summary):</strong><br>
+    MEMVERSE is a client-governed zero-trust privacy gateway that empowers AI assistants to deliver highly personalized responses without exposing raw personal identifiers to external LLMs. Through an automated 12-stage security pipeline, dynamic policy transformation (names to roles, exact numbers to bands, locations to regions), cryptographic Memory Passports, and tamper-evident SHA-256 ledger receipts, MEMVERSE guarantees mathematical privacy for text, PDF documents, and biometric images.
+  </div>
+
+  <h2>👥 Team Information</h2>
+  <table style="margin: 6px 0;">
+    <thead>
+      <tr>
+        <th style="width: 25%;">Role</th>
+        <th style="width: 30%;">Name</th>
+        <th style="width: 45%;">Institution & Details</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Team Lead & Developer</strong></td>
+        <td><strong>Satvik Kesarwani</strong></td>
+        <td>Indian Institute of Information Technology (IIIT), Pune<br>B.Tech — Computer Science & Engineering (MIS: <code>112315166</code>)</td>
+      </tr>
+      <tr>
+        <td><strong>Team Name</strong></td>
+        <td colspan="2"><strong>Team MEMVERSE</strong> (Zero-Trust AI Privacy Initiative)</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>🔗 Project Links & Live Deployments</h2>
+  <div class="grid-2" style="margin: 8px 0;">
+    <div class="card" style="border-top: 3px solid #06b6d4;">
+      <div class="card-title">🌐 Live Web Application (Vercel)</div>
+      <p style="margin-bottom: 4px; font-size: 8.5pt;">Fully interactive React/Vite frontend with ChatView, Identity Vault, and live Trace Radar:</p>
+      <a class="link-btn" href="https://memverse-satvikkesarwanis-projects.vercel.app">https://memverse-satvikkesarwanis-projects.vercel.app</a>
+    </div>
+    <div class="card" style="border-top: 3px solid #6366f1;">
+      <div class="card-title">⚙️ Gateway API Service (Render)</div>
+      <p style="margin-bottom: 4px; font-size: 8.5pt;">FastAPI zero-trust gateway with live NVIDIA NIM model integration and health check:</p>
+      <a class="link-btn" href="https://memverse-api.onrender.com/api/status">https://memverse-api.onrender.com/api/status</a>
+    </div>
+  </div>
+
+  <div class="card" style="margin: 6px 0; border-top: 3px solid #10b981;">
+    <div class="card-title">💻 Source Code Repository (GitHub)</div>
+    <p style="margin-bottom: 4px; font-size: 8.5pt;">Full monorepo including frontend, backend, test suite (66 tests passed), and Playwright E2E runners:</p>
+    <a class="link-btn" href="https://github.com/satvikkesarwani/memverse">https://github.com/satvikkesarwani/memverse</a>
+  </div>
+
+  <h2>⚡ Core Innovations & Technical Highlights</h2>
+  <div class="grid-2" style="margin: 6px 0; font-size: 8pt;">
+    <div class="card">
+      <strong>1. 12-Stage Zero-Trust Pipeline:</strong> Synchronous pipeline performing NER detection, prompt injection defense, policy transformation, and egress gatekeeping in &lt;15ms.
+    </div>
+    <div class="card">
+      <strong>2. Multimodal Privacy Engine:</strong> Automated redaction for uploaded PDF grade sheets and browser-native facial biometric detection with explicit consent.
+    </div>
+    <div class="card">
+      <strong>3. Cryptographic Memory Passports:</strong> Scoped access tokens with strict TTL expiration and instant revocation mechanisms.
+    </div>
+    <div class="card">
+      <strong>4. Tamper-Evident Hash Receipts:</strong> SHA-256 Merkle-style audit ledger providing non-repudiation and verifiable mathematical proofs.
+    </div>
+  </div>
+
+  <div style="margin-top: 10px; background: #f8fafc; border: 1px solid #e2e8f0; padding: 6px 10px; border-radius: 6px; font-size: 8pt; color: #475569; display: flex; justify-content: space-between;">
+    <span><strong>Tech Stack:</strong> React 18, Vite, FastAPI, Python 3.11, NVIDIA NIM API, Cryptography (AES-256), face-api.js, PyPDF</span>
+    <span><strong>License:</strong> MIT</span>
+  </div>
+
+  <div class="footer-stamp" style="margin-top: 10px; padding-top: 6px;">
+    <span>MEMVERSE Submission Cover · Satvik Kesarwani</span>
+    <span>Live App: memverse-satvikkesarwanis-projects.vercel.app</span>
+  </div>
+
+</body>
+</html>
 """
 
 HTML_DOC1 = f"""
@@ -660,6 +786,13 @@ def generate_pdfs():
         pdf2_path = os.path.join(OUTPUT_DIR, "MEMVERSE_Architecture_and_User_Flow.pdf")
         page2.pdf(path=pdf2_path, format="A4", print_background=True)
         print(f"Generated: {pdf2_path}")
+        
+        # 3. Document 3: One-Page Executive Submission Summary
+        page3 = browser.new_page()
+        page3.set_content(HTML_ONE_PAGE)
+        pdf3_path = os.path.join(OUTPUT_DIR, "MEMVERSE_Submission_Summary.pdf")
+        page3.pdf(path=pdf3_path, format="A4", print_background=True)
+        print(f"Generated: {pdf3_path}")
         
         browser.close()
 
