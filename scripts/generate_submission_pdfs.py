@@ -332,23 +332,27 @@ HTML_ONE_PAGE = f"""
   </table>
 
   <h2>🔗 Project Links & Live Deployments</h2>
-  <div class="grid-2" style="margin: 8px 0;">
+  <div class="grid-2" style="margin: 6px 0;">
     <div class="card" style="border-top: 3px solid #06b6d4;">
       <div class="card-title">🌐 Live Web Application (Vercel)</div>
-      <p style="margin-bottom: 4px; font-size: 8.5pt;">Fully interactive React/Vite frontend with ChatView, Identity Vault, and live Trace Radar:</p>
+      <p style="margin-bottom: 3px; font-size: 8pt;">Interactive React/Vite app with ChatView, Identity Vault & Trace Radar:</p>
       <a class="link-btn" href="https://memverse-satvikkesarwanis-projects.vercel.app">https://memverse-satvikkesarwanis-projects.vercel.app</a>
     </div>
     <div class="card" style="border-top: 3px solid #6366f1;">
       <div class="card-title">⚙️ Gateway API Service (Render)</div>
-      <p style="margin-bottom: 4px; font-size: 8.5pt;">FastAPI zero-trust gateway with live NVIDIA NIM model integration and health check:</p>
+      <p style="margin-bottom: 3px; font-size: 8pt;">FastAPI zero-trust gateway with live NVIDIA NIM integration:</p>
       <a class="link-btn" href="https://memverse-api.onrender.com/api/status">https://memverse-api.onrender.com/api/status</a>
     </div>
-  </div>
-
-  <div class="card" style="margin: 6px 0; border-top: 3px solid #10b981;">
-    <div class="card-title">💻 Source Code Repository (GitHub)</div>
-    <p style="margin-bottom: 4px; font-size: 8.5pt;">Full monorepo including frontend, backend, test suite (66 tests passed), and Playwright E2E runners:</p>
-    <a class="link-btn" href="https://github.com/satvikkesarwani/memverse">https://github.com/satvikkesarwani/memverse</a>
+    <div class="card" style="border-top: 3px solid #10b981;">
+      <div class="card-title">💻 Source Code Repository (GitHub)</div>
+      <p style="margin-bottom: 3px; font-size: 8pt;">Monorepo including frontend, backend, test suite & Playwright E2E:</p>
+      <a class="link-btn" href="https://github.com/satvikkesarwani/memverse">https://github.com/satvikkesarwani/memverse</a>
+    </div>
+    <div class="card" style="border-top: 3px solid #f59e0b;">
+      <div class="card-title">📁 Memverse Project Details (Drive)</div>
+      <p style="margin-bottom: 3px; font-size: 8pt;">Submission folder containing video demo, architectural assets & documentation:</p>
+      <a class="link-btn" href="https://drive.google.com/drive/folders/1UO3jMmCsiOP9CiwQckT6S5NyeJYVo_f9?usp=sharing">https://drive.google.com/drive/folders/1UO3jMmCsiOP9CiwQckT6S5NyeJYVo_f9?usp=sharing</a>
+    </div>
   </div>
 
   <h2>⚡ Core Innovations & Technical Highlights</h2>
