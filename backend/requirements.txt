@@ -4,6 +4,9 @@ uvicorn>=0.30
 pydantic>=2.7
 cryptography>=42
 python-dotenv>=1.0
+python-multipart>=0.0.9
+Pillow>=10.0.0
+pypdf>=4.0.0
 
 # --- tests ---
 pytest>=8
